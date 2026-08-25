@@ -1,0 +1,22 @@
+{
+  "name": "beautijoo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Beautijoo - Persian RTL marketplace and booking platform for beauty professionals",
+  "scripts": {
+    "backend:dev": "cd backend && npm run start:dev",
+    "backend:build": "cd backend && npm run build",
+    "backend:test": "cd backend && npm run test",
+    "frontend:dev": "cd frontend && npm run dev",
+    "frontend:build": "cd frontend && npm run build",
+    "frontend:lint": "cd frontend && npm run lint",
+    "db:up": "docker compose -f docker/docker-compose.yml up -d",
+    "db:down": "docker compose -f docker/docker-compose.yml down",
+    "prisma:generate": "cd backend && npx prisma generate",
+    "prisma:migrate": "cd backend && npx prisma migrate dev",
+    "prisma:seed": "cd backend && npx prisma db seed"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: beautijoo-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: beautijoo
+      POSTGRES_PASSWORD: beautijoo_dev
+      POSTGRES_DB: beautijoo
+    ports:
+      - "5432:5432"
+    volumes:
+      - beautijoo_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U beautijoo -d beautijoo"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  beautijoo_pgdata:
