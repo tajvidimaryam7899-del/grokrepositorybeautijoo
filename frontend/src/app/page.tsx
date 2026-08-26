@@ -1,7 +1,35 @@
 import Link from 'next/link';
 import { Search } from 'lucide-react';
+import type { Metadata } from 'next';
+import {
+  listCategories,
+  searchProfessionals,
+} from '@/lib/public-api';
+import { ProfessionalCard } from '@/components/professionals/professional-card';
+import { siteName } from '@/lib/seo';
 
-export default function HomePage() {
+export const metadata: Metadata = {
+  title: { absolute: `${siteName()} | رزرو آنلاین خدمات زیبایی` },
+  description:
+    'زیباگر مناسب خود را پیدا کنید — رزرو آنلاین آرایش، ناخن، پوست و خدمات زیبایی در سراسر ایران.',
+};
+
+export default async function HomePage() {
+  let categories: Awaited<ReturnType<typeof listCategories>> = [];
+  let featured: Awaited<ReturnType<typeof searchProfessionals>> | null = null;
+  let loadError = false;
+
+  try {
+    const [cats, pros] = await Promise.all([
+      listCategories(),
+      searchProfessionals({ page: 1, limit: 6 }),
+    ]);
+    categories = cats;
+    featured = pros;
+  } catch {
+    loadError = true;
+  }
+
   return (
     <div>
       <section className="bg-gradient-to-b from-coral-soft to-white">
@@ -38,29 +66,84 @@ export default function HomePage() {
         </div>
       </section>
 
+      {categories.length > 0 && (
+        <section className="mx-auto max-w-6xl px-4 py-12">
+          <div className="mb-6 flex items-end justify-between gap-4">
+            <h2 className="text-xl font-bold">دسته‌بندی خدمات</h2>
+            <Link href="/services" className="text-sm font-medium text-coral hover:underline">
+              همه خدمات
+            </Link>
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+            {categories.slice(0, 8).map((c) => (
+              <Link
+                key={c.id}
+                href={`/categories/${c.slug}`}
+                className="rounded-2xl border border-border bg-white p-4 text-center shadow-sm transition hover:border-coral-light"
+              >
+                <span className="font-medium text-foreground">{c.name}</span>
+                {c.services && (
+                  <span className="mt-1 block text-xs text-gray">
+                    {c.services.length} خدمت
+                  </span>
+                )}
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
+
       <section className="mx-auto max-w-6xl px-4 py-12">
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="mb-6 flex items-end justify-between gap-4">
+          <h2 className="text-xl font-bold">زیباگران برتر</h2>
           <Link
             href="/professionals"
-            className="rounded-3xl border border-border bg-white p-6 shadow-sm transition hover:border-coral-light"
+            className="text-sm font-medium text-coral hover:underline"
           >
-            <h2 className="text-lg font-bold">زیباگران</h2>
-            <p className="mt-2 text-sm text-gray">مشاهده لیست زیباگران تأییدشده</p>
+            مشاهده همه
           </Link>
-          <Link
-            href="/search"
-            className="rounded-3xl border border-border bg-white p-6 shadow-sm transition hover:border-coral-light"
-          >
-            <h2 className="text-lg font-bold">جستجو و فیلتر</h2>
-            <p className="mt-2 text-sm text-gray">خدمت، شهر، قیمت و امتیاز</p>
-          </Link>
-          <Link
-            href="/register"
-            className="rounded-3xl border border-border bg-blue-light p-6 shadow-sm transition hover:border-blue"
-          >
-            <h2 className="text-lg font-bold text-blue">ثبت‌نام رایگان</h2>
-            <p className="mt-2 text-sm text-gray">شروع رزرو در چند دقیقه</p>
-          </Link>
+        </div>
+        {loadError && (
+          <p className="rounded-2xl bg-gray-light px-4 py-6 text-center text-sm text-gray">
+            در حال حاضر امکان بارگذاری لیست زیباگران نیست. بعداً تلاش کنید.
+          </p>
+        )}
+        {!loadError && featured && featured.items.length === 0 && (
+          <p className="text-center text-sm text-gray">
+            هنوز زیباگر تأییدشده‌ای ثبت نشده است.
+          </p>
+        )}
+        {featured && featured.items.length > 0 && (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {featured.items.map((pro) => (
+              <ProfessionalCard key={pro.id} pro={pro} />
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="border-t border-border bg-blue-light/40">
+        <div className="mx-auto max-w-6xl px-4 py-14 text-center">
+          <h2 className="text-2xl font-bold text-foreground">
+            آماده رزرو هستید؟
+          </h2>
+          <p className="mt-2 text-gray">
+            زیباگر را انتخاب کنید، زمان آزاد را ببینید و نوبت بگیرید.
+          </p>
+          <div className="mt-6 flex flex-wrap justify-center gap-3">
+            <Link
+              href="/search"
+              className="inline-flex h-11 items-center rounded-2xl bg-coral px-6 text-sm font-medium text-white hover:bg-[#e85a4c]"
+            >
+              شروع جستجو
+            </Link>
+            <Link
+              href="/register"
+              className="inline-flex h-11 items-center rounded-2xl border border-border bg-white px-6 text-sm font-medium hover:bg-gray-light"
+            >
+              ثبت‌نام رایگان
+            </Link>
+          </div>
         </div>
       </section>
     </div>
