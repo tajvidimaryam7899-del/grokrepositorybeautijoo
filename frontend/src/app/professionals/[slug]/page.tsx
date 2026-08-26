@@ -192,13 +192,13 @@ export default async function ProfessionalProfilePage({ params }: Props) {
               برای انتخاب زمان و ثبت نوبت وارد جریان رزرو شوید.
             </p>
             <Link
-              href={`/search?q=${encodeURIComponent(pro.slug)}`}
+              href={`/booking/${pro.slug}`}
               className="mt-4 flex h-11 w-full items-center justify-center rounded-2xl bg-coral text-sm font-medium text-white hover:bg-[#e85a4c]"
             >
-              ادامه برای رزرو
+              رزرو نوبت
             </Link>
             <p className="mt-2 text-xs text-gray">
-              انتخاب تاریخ و اسلات در Batch رزرو (API availability) کامل می‌شود.
+              انتخاب خدمت، تاریخ و ساعت آزاد از سرور
             </p>
           </div>
 
