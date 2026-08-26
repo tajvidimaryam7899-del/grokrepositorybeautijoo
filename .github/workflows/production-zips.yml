@@ -64,12 +64,20 @@ jobs:
           zip -qr "$GITHUB_WORKSPACE/beautijoo-frontend-production.zip" .
 
       - name: Verify ZIP structure and forbidden files
+        shell: bash
         run: |
-          set -e
-          test -n "$(unzip -l beautijoo-backend-production.zip | grep -E '(^|/)package.json$' || true)"
-          test -n "$(unzip -l beautijoo-frontend-production.zip | grep -E '(^|/)package.json$' || true)"
-          if unzip -l beautijoo-backend-production.zip | grep -E 'node_modules/|dist/|(^|/)\.env($|\.)'; then exit 1; fi
-          if unzip -l beautijoo-frontend-production.zip | grep -E 'node_modules/|\.next/|dist/|(^|/)\.env($|\.)'; then exit 1; fi
+          set -euo pipefail
+          unzip -l beautijoo-backend-production.zip > /tmp/backend-zip-list.txt
+          unzip -l beautijoo-frontend-production.zip > /tmp/frontend-zip-list.txt
+
+          grep -Eq '(^|[[:space:]])package.json$' /tmp/backend-zip-list.txt
+          grep -Eq '(^|[[:space:]])package.json$' /tmp/frontend-zip-list.txt
+
+          ! grep -Eq 'node_modules/|dist/|(^|/)\.env($|/)' /tmp/backend-zip-list.txt
+          ! grep -Eq 'node_modules/|\.next/|dist/|(^|/)\.env($|/)' /tmp/frontend-zip-list.txt
+
+          unzip -t beautijoo-backend-production.zip >/dev/null
+          unzip -t beautijoo-frontend-production.zip >/dev/null
 
       - name: Upload Backend ZIP
         uses: actions/upload-artifact@v4
