@@ -1,12 +1,7 @@
-import {
-  Injectable,
-  NotFoundException,
-  BadRequestException,
-  Inject,
-  ForbiddenException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, Inject, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { PAYMENT_PROVIDER, PaymentProvider } from './payment.provider';
+import { randomUUID } from 'crypto';
 
 @Injectable()
 export class PaymentsService {
@@ -15,100 +10,62 @@ export class PaymentsService {
     @Inject(PAYMENT_PROVIDER) private readonly provider: PaymentProvider,
   ) {}
 
-  async initiate(userId: string, bookingId: string) {
+  async initiate(userId: string, bookingId: string, callbackUrl: string) {
     const booking = await this.prisma.booking.findUnique({
       where: { id: bookingId },
       include: { payment: true },
     });
-    if (!booking) throw new NotFoundException('رزرو یافت نشد');
+    if (!booking) throw new NotFoundException();
     if (booking.customerId !== userId) throw new ForbiddenException();
-    if (booking.payment) throw new BadRequestException('پرداخت قبلاً ثبت شده');
+    if (booking.payment?.status === 'paid') throw new ConflictException('قبلاً پرداخت شده');
 
-    const amount = Number(booking.totalAmount);
-    const result = await this.provider.createPayment({
-      amount,
-      currency: 'IRR',
-      description: `Booking ${bookingId}`,
-      metadata: { bookingId, userId },
-    });
+    const idempotencyKey = booking.payment?.idempotencyKey || randomUUID();
 
-    const payment = await this.prisma.payment.create({
-      data: {
-        bookingId,
-        amount: booking.totalAmount,
-        currency: 'IRR',
-        status: result.success ? 'pending' : 'failed',
-        provider: 'mock',
-        providerRef: result.providerRef,
-        rawResponse: result.raw as object,
-      },
-    });
-
-    return {
-      paymentId: payment.id,
-      status: payment.status,
-      redirectUrl: result.redirectUrl,
-      providerRef: result.providerRef,
-    };
-  }
-
-  async verify(userId: string, paymentId: string, providerRef?: string) {
-    const payment = await this.prisma.payment.findUnique({
-      where: { id: paymentId },
-      include: { booking: true },
-    });
-    if (!payment) throw new NotFoundException();
-    if (payment.booking.customerId !== userId) throw new ForbiddenException();
-
-    const ref = providerRef || payment.providerRef;
-    if (!ref) throw new BadRequestException('providerRef required');
-
-    const result = await this.provider.verifyPayment(ref);
-    const status = result.success ? 'paid' : 'failed';
-
-    const updated = await this.prisma.$transaction(async (tx) => {
-      const p = await tx.payment.update({
-        where: { id: paymentId },
+    if (!booking.payment) {
+      await this.prisma.payment.create({
         data: {
-          status,
-          providerRef: ref,
-          paidAt: result.success ? new Date() : null,
-          rawResponse: result.raw as object,
+          bookingId,
+          amount: booking.totalPrice,
+          status: 'pending',
+          provider: 'mock',
+          idempotencyKey,
         },
       });
-      if (result.success) {
-        await tx.booking.update({
-          where: { id: payment.bookingId },
-          data: { status: 'confirmed' },
-        });
-      }
-      return p;
+    }
+
+    const result = await this.provider.initiate({
+      amount: booking.totalPrice,
+      bookingId,
+      idempotencyKey,
+      callbackUrl,
     });
 
-    return { paymentId: updated.id, status: updated.status };
+    await this.prisma.payment.update({
+      where: { bookingId },
+      data: { providerRef: result.providerRef, status: 'processing' },
+    });
+
+    return result;
   }
 
-  async findOne(userId: string, id: string) {
-    const payment = await this.prisma.payment.findUnique({
-      where: { id },
-      include: { booking: true },
-    });
+  async callback(providerRef: string) {
+    const payment = await this.prisma.payment.findFirst({ where: { providerRef } });
     if (!payment) throw new NotFoundException();
-    if (payment.booking.customerId !== userId) throw new ForbiddenException();
-    return payment;
-  }
+    if (payment.status === 'paid') return { status: 'paid', bookingId: payment.bookingId };
 
-  async refund(paymentId: string) {
-    const payment = await this.prisma.payment.findUnique({ where: { id: paymentId } });
-    if (!payment) throw new NotFoundException();
-    if (payment.status !== 'paid') throw new BadRequestException('only paid payments can be refunded');
+    const verified = await this.provider.verify(providerRef);
+    if (!verified.success) {
+      await this.prisma.payment.update({
+        where: { id: payment.id },
+        data: { status: 'failed', failedAt: new Date() },
+      });
+      return { status: 'failed', bookingId: payment.bookingId };
+    }
 
-    const result = await this.provider.refund(payment.providerRef!);
-    if (!result.success) throw new BadRequestException('refund failed');
-
-    return this.prisma.payment.update({
-      where: { id: paymentId },
-      data: { status: 'refunded', refundedAt: new Date() },
+    await this.prisma.payment.update({
+      where: { id: payment.id },
+      data: { status: 'paid', paidAt: new Date() },
     });
+    return { status: 'paid', bookingId: payment.bookingId };
   }
 }
