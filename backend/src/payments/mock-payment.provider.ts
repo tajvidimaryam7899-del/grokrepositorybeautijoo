@@ -1,33 +1,28 @@
-import { Injectable } from '@nestjs/common';
-import { PaymentProvider, CreatePaymentInput, PaymentResult } from './payment.provider';
+import { Injectable, Logger } from '@nestjs/common';
+import { PaymentProvider, PaymentInitResult } from './payment.provider';
+import { randomUUID } from 'crypto';
 
 @Injectable()
 export class MockPaymentProvider implements PaymentProvider {
-  async createPayment(input: CreatePaymentInput): Promise<PaymentResult> {
-    const ref = `MOCK-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  private readonly logger = new Logger(MockPaymentProvider.name);
+
+  async initiate(params: {
+    amount: number;
+    bookingId: string;
+    idempotencyKey: string;
+    callbackUrl: string;
+  }): Promise<PaymentInitResult> {
+    const providerRef = `mock_${randomUUID()}`;
+    this.logger.log(`[MOCK PAY] amount=${params.amount} booking=${params.bookingId}`);
     return {
-      success: true,
-      providerRef: ref,
-      redirectUrl: input.callbackUrl
-        ? `${input.callbackUrl}?status=ok&ref=${ref}`
-        : undefined,
-      raw: { mock: true, amount: input.amount, currency: input.currency },
+      paymentId: params.idempotencyKey,
+      providerRef,
+      redirectUrl: `${params.callbackUrl}?ref=${providerRef}&status=ok`,
     };
   }
 
-  async verifyPayment(providerRef: string): Promise<PaymentResult> {
-    return {
-      success: true,
-      providerRef,
-      raw: { mock: true, verified: true },
-    };
-  }
-
-  async refund(providerRef: string, amount?: number): Promise<PaymentResult> {
-    return {
-      success: true,
-      providerRef,
-      raw: { mock: true, refunded: true, amount },
-    };
+  async verify(providerRef: string) {
+    this.logger.log(`[MOCK PAY VERIFY] ref=${providerRef}`);
+    return { success: true };
   }
 }

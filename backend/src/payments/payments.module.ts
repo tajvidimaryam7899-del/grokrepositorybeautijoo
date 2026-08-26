@@ -3,14 +3,13 @@ import { PaymentsService } from './payments.service';
 import { PaymentsController } from './payments.controller';
 import { PAYMENT_PROVIDER } from './payment.provider';
 import { MockPaymentProvider } from './mock-payment.provider';
-import { PrismaModule } from '../prisma/prisma.module';
 
 @Module({
-  imports: [PrismaModule],
   controllers: [PaymentsController],
   providers: [
     PaymentsService,
     { provide: PAYMENT_PROVIDER, useClass: MockPaymentProvider },
+    MockPaymentProvider,
   ],
   exports: [PaymentsService],
 })
