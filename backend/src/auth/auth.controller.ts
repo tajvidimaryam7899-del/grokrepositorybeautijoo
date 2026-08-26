@@ -1,14 +1,10 @@
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Body, Controller, Get, Post, HttpCode } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
-import { RegisterDto } from './dto/register.dto';
-import { LoginDto } from './dto/login.dto';
-import { OtpRequestDto } from './dto/otp-request.dto';
-import { OtpVerifyDto } from './dto/otp-verify.dto';
-import { RefreshDto } from './dto/refresh.dto';
+import { RegisterDto, LoginDto, RequestOtpDto, VerifyOtpDto, RefreshDto } from './dto/auth.dto';
 import { Public } from '../common/decorators/public.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -17,50 +13,51 @@ export class AuthController {
 
   @Public()
   @Post('register')
-  @ApiOperation({ summary: 'ثبت‌نام با شماره موبایل' })
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   register(@Body() dto: RegisterDto) {
     return this.auth.register(dto);
   }
 
   @Public()
   @Post('login')
-  @ApiOperation({ summary: 'ورود با رمز عبور' })
+  @HttpCode(200)
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   login(@Body() dto: LoginDto) {
     return this.auth.login(dto);
   }
 
   @Public()
   @Post('otp/request')
-  @ApiOperation({ summary: 'درخواست کد OTP' })
-  requestOtp(@Body() dto: OtpRequestDto) {
+  @HttpCode(200)
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  requestOtp(@Body() dto: RequestOtpDto) {
     return this.auth.requestOtp(dto);
   }
 
   @Public()
   @Post('otp/verify')
-  @ApiOperation({ summary: 'تأیید کد OTP و ورود/ثبت‌نام' })
-  verifyOtp(@Body() dto: OtpVerifyDto) {
+  @HttpCode(200)
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  verifyOtp(@Body() dto: VerifyOtpDto) {
     return this.auth.verifyOtp(dto);
   }
 
   @Public()
   @Post('refresh')
-  @ApiOperation({ summary: 'تمدید access token' })
+  @HttpCode(200)
   refresh(@Body() dto: RefreshDto) {
     return this.auth.refresh(dto.refreshToken);
   }
 
   @Public()
   @Post('logout')
-  @ApiOperation({ summary: 'خروج و ابطال refresh token' })
+  @HttpCode(200)
   logout(@Body() dto: RefreshDto) {
     return this.auth.logout(dto.refreshToken);
   }
 
-  @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @Get('me')
-  @ApiOperation({ summary: 'اطلاعات کاربر فعلی' })
   me(@CurrentUser('id') userId: string) {
     return this.auth.me(userId);
   }
