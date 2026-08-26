@@ -7,7 +7,7 @@ import { fetchAdminProfessionals, setProfessionalStatus, type AdminProfessional 
 import { persianProfessionalStatus } from '@/lib/persian-status';
 import { friendlyApiError } from '@/lib/api-errors';
 
-const STATUSES = ['ACTIVE', 'PENDING_REVIEW', 'SUSPENDED', 'REJECTED', 'DRAFT'];
+const STATUSES = ['approved', 'pending_review', 'suspended', 'rejected', 'draft'];
 
 export default function AdminProfessionalsPage() {
   const [items, setItems] = useState<AdminProfessional[]>([]);

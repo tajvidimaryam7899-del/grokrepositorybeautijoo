@@ -1,18 +1,34 @@
+/** Status labels aligned with Prisma enums (lowercase / snake_case). */
 export function persianBookingStatus(status: string): string {
   const map: Record<string, string> = {
-    PENDING: 'در انتظار تأیید', CONFIRMED: 'تأیید شده', REJECTED: 'رد شده',
-    CANCELLED: 'لغو شده', COMPLETED: 'انجام شده', NO_SHOW: 'عدم حضور',
+    pending: 'در انتظار تأیید',
+    confirmed: 'تأیید شده',
+    rejected: 'رد شده',
+    cancelled: 'لغو شده',
+    completed: 'انجام شده',
+    expired: 'منقضی شده',
+    NO_SHOW: 'عدم حضور',
   };
-  return map[status] || status;
+  return map[status] || map[status.toLowerCase()] || status;
 }
+
 export function persianProfessionalStatus(status: string): string {
   const map: Record<string, string> = {
-    DRAFT: 'پیش‌نویس', PENDING_REVIEW: 'در انتظار بررسی', ACTIVE: 'فعال',
-    SUSPENDED: 'معلق', REJECTED: 'رد شده',
+    draft: 'پیش‌نویس',
+    pending_review: 'در انتظار بررسی',
+    approved: 'تأیید شده',
+    rejected: 'رد شده',
+    suspended: 'معلق',
   };
   return map[status] || status;
 }
+
 export const WEEKDAY_FA: Record<string, string> = {
-  SUNDAY: 'یکشنبه', MONDAY: 'دوشنبه', TUESDAY: 'سه‌شنبه', WEDNESDAY: 'چهارشنبه',
-  THURSDAY: 'پنجشنبه', FRIDAY: 'جمعه', SATURDAY: 'شنبه',
+  SUNDAY: 'یکشنبه',
+  MONDAY: 'دوشنبه',
+  TUESDAY: 'سه‌شنبه',
+  WEDNESDAY: 'چهارشنبه',
+  THURSDAY: 'پنجشنبه',
+  FRIDAY: 'جمعه',
+  SATURDAY: 'شنبه',
 };

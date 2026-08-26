@@ -56,7 +56,7 @@ export default function PanelBookingsPage() {
               {b.totalPrice != null && <p className="text-sm text-gray">{formatPrice(b.totalPrice)}</p>}
               <div className="flex flex-wrap gap-2">
                 <Link href={`/booking/confirmation/${b.id}`}><Button size="sm" variant="outline">جزئیات</Button></Link>
-                {b.status === 'COMPLETED' && <Button size="sm" variant="secondary" onClick={() => setReviewFor(b.id)}>ثبت نظر</Button>}
+                {b.status === 'completed' && <Button size="sm" variant="secondary" onClick={() => setReviewFor(b.id)}>ثبت نظر</Button>}
               </div>
               {reviewFor === b.id && (
                 <div className="mt-2 space-y-2 rounded-xl bg-gray-light p-3">

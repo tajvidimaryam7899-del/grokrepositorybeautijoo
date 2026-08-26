@@ -45,16 +45,16 @@ export default function ZibagarBookingsPage() {
               </div>
               {b.totalPrice != null && <p className="text-sm text-gray">{formatPrice(b.totalPrice)}</p>}
               <div className="flex flex-wrap gap-2">
-                {b.status === 'PENDING' && (
+                {b.status === 'pending' && (
                   <>
                     <Button size="sm" loading={busy === `${b.id}:confirm`} onClick={() => act(b.id, 'confirm')}>تأیید</Button>
                     <Button size="sm" variant="secondary" loading={busy === `${b.id}:reject`} onClick={() => act(b.id, 'reject')}>رد</Button>
                   </>
                 )}
-                {(b.status === 'PENDING' || b.status === 'CONFIRMED') && (
+                {(b.status === 'pending' || b.status === 'confirmed') && (
                   <Button size="sm" variant="outline" loading={busy === `${b.id}:cancel`} onClick={() => act(b.id, 'cancel')}>لغو</Button>
                 )}
-                {b.status === 'CONFIRMED' && (
+                {b.status === 'confirmed' && (
                   <Button size="sm" loading={busy === `${b.id}:complete`} onClick={() => act(b.id, 'complete')}>تکمیل</Button>
                 )}
               </div>
