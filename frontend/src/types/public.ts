@@ -47,9 +47,19 @@ export type ProfessionalListItem = {
   ratingCount?: number | null;
   user?: { profile?: ProfileSnippet | null } | null;
   locations?: { location: LocationSnippet; isPrimary?: boolean }[];
-  professionalServices?: {
-    service: { name: string; slug: string };
-  }[];
+  /** List may return a subset; detail uses ProfessionalServiceItem[] */
+  professionalServices?: Array<{
+    id?: string;
+    durationMin?: number;
+    price?: number;
+    bufferMin?: number;
+    service: {
+      id?: string;
+      name: string;
+      slug: string;
+      category?: { id?: string; name: string; slug?: string } | null;
+    };
+  }>;
 };
 
 export type ProfessionalsSearchResponse = {
@@ -79,7 +89,10 @@ export type ReviewItem = {
   customer?: { profile?: { displayName?: string | null } | null } | null;
 };
 
-export type ProfessionalDetail = ProfessionalListItem & {
+export type ProfessionalDetail = Omit<
+  ProfessionalListItem,
+  'professionalServices' | 'locations'
+> & {
   locations: { location: LocationSnippet; isPrimary?: boolean }[];
   professionalServices: ProfessionalServiceItem[];
   workingHours: WorkingHour[];
