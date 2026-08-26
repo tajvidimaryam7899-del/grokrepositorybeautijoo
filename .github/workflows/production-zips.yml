@@ -1,0 +1,86 @@
+name: Build Production ZIPs
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  build-zips:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Build Backend
+        working-directory: backend
+        run: |
+          npm install
+          npx prisma generate
+          npm run build
+
+      - name: Build Frontend
+        working-directory: frontend
+        run: |
+          npm install
+          npm run typecheck
+          npm run build
+
+      - name: Prepare Backend ZIP
+        run: |
+          rm -rf /tmp/beautijoo-backend
+          mkdir -p /tmp/beautijoo-backend
+          rsync -a backend/ /tmp/beautijoo-backend/ \
+            --exclude=node_modules \
+            --exclude=dist \
+            --exclude=.env \
+            --exclude=.env.local \
+            --exclude=.env.production
+          cd /tmp/beautijoo-backend
+          zip -qr "$GITHUB_WORKSPACE/beautijoo-backend-production.zip" .
+
+      - name: Prepare Frontend ZIP
+        run: |
+          rm -rf /tmp/beautijoo-frontend
+          mkdir -p /tmp/beautijoo-frontend
+          rsync -a frontend/ /tmp/beautijoo-frontend/ \
+            --exclude=node_modules \
+            --exclude=.next \
+            --exclude=dist \
+            --exclude=.env \
+            --exclude=.env.local \
+            --exclude=.env.production
+          cd /tmp/beautijoo-frontend
+          zip -qr "$GITHUB_WORKSPACE/beautijoo-frontend-production.zip" .
+
+      - name: Verify ZIP structure and forbidden files
+        run: |
+          set -e
+          test -n "$(unzip -l beautijoo-backend-production.zip | grep -E '(^|/)package.json$' || true)"
+          test -n "$(unzip -l beautijoo-frontend-production.zip | grep -E '(^|/)package.json$' || true)"
+          if unzip -l beautijoo-backend-production.zip | grep -E 'node_modules/|dist/|(^|/)\.env($|\.)'; then exit 1; fi
+          if unzip -l beautijoo-frontend-production.zip | grep -E 'node_modules/|\.next/|dist/|(^|/)\.env($|\.)'; then exit 1; fi
+
+      - name: Upload Backend ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: beautijoo-backend-production
+          path: beautijoo-backend-production.zip
+          retention-days: 30
+
+      - name: Upload Frontend ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: beautijoo-frontend-production
+          path: beautijoo-frontend-production.zip
+          retention-days: 30
