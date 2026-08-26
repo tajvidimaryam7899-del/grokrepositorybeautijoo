@@ -1,22 +1,17 @@
-export const PAYMENT_PROVIDER = Symbol('PAYMENT_PROVIDER');
+export const PAYMENT_PROVIDER = 'PAYMENT_PROVIDER';
 
-export interface CreatePaymentInput {
-  amount: number;
-  currency: string;
-  description?: string;
-  callbackUrl?: string;
-  metadata?: Record<string, unknown>;
-}
-
-export interface PaymentResult {
-  success: boolean;
-  providerRef: string;
+export interface PaymentInitResult {
+  paymentId: string;
   redirectUrl?: string;
-  raw?: unknown;
+  providerRef?: string;
 }
 
 export interface PaymentProvider {
-  createPayment(input: CreatePaymentInput): Promise<PaymentResult>;
-  verifyPayment(providerRef: string): Promise<PaymentResult>;
-  refund(providerRef: string, amount?: number): Promise<PaymentResult>;
+  initiate(params: {
+    amount: number;
+    bookingId: string;
+    idempotencyKey: string;
+    callbackUrl: string;
+  }): Promise<PaymentInitResult>;
+  verify(providerRef: string): Promise<{ success: boolean; amount?: number }>;
 }
