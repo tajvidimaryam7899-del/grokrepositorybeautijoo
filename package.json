@@ -4,7 +4,7 @@
   "private": true,
   "description": "Beautijoo - Persian RTL marketplace and booking platform for beauty professionals",
   "scripts": {
-    "build": "cd frontend && npm install && npm run build && rm -rf ../.next && cp -a .next ../.next && mkdir -p ../public",
+    "build": "cd frontend && npm install && npm run build && rm -rf ../.next && cp -a .next ../.next && mkdir -p ../public && cp -a public/. ../public/ 2>/dev/null || true",
     "backend:dev": "cd backend && npm run start:dev",
     "backend:build": "cd backend && npm run build",
     "backend:test": "cd backend && npm run test",
