@@ -13,6 +13,18 @@ import { PrismaService } from '../prisma/prisma.service';
 import { SMS_PROVIDER, SmsProvider } from '../sms/sms.provider';
 import { RegisterDto, LoginDto, RequestOtpDto, VerifyOtpDto } from './dto/auth.dto';
 
+/** Parse JWT-style TTL (e.g. 15m, 7d, 24h) to milliseconds. */
+function ttlToMs(ttl: string | undefined, fallbackMs: number): number {
+  if (!ttl) return fallbackMs;
+  const m = /^(\d+)([smhd])$/i.exec(ttl.trim());
+  if (!m) return fallbackMs;
+  const n = parseInt(m[1], 10);
+  const unit = m[2].toLowerCase();
+  const mult =
+    unit === 's' ? 1000 : unit === 'm' ? 60_000 : unit === 'h' ? 3_600_000 : 86_400_000;
+  return n * mult;
+}
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -40,8 +52,8 @@ export class AuthService {
         expiresIn: this.config.get('jwt.refreshTtl') || '7d',
       },
     );
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 7);
+    const refreshTtl = this.config.get<string>('jwt.refreshTtl') || '7d';
+    const expiresAt = new Date(Date.now() + ttlToMs(refreshTtl, 7 * 86_400_000));
     await this.prisma.refreshToken.create({
       data: {
         userId,
