@@ -10,7 +10,11 @@ export class FavoritesService {
       where: { userId },
       orderBy: { createdAt: 'desc' },
       include: {
-        // Favorite only has professionalId - need relation or manual join
+        professional: {
+          include: {
+            user: { select: { profile: { select: { displayName: true, avatarUrl: true } } } },
+          },
+        },
       },
     });
   }
@@ -19,18 +23,17 @@ export class FavoritesService {
     const favs = await this.prisma.favorite.findMany({
       where: { userId },
       orderBy: { createdAt: 'desc' },
-    });
-    const ids = favs.map((f) => f.professionalId);
-    const pros = await this.prisma.professional.findMany({
-      where: { id: { in: ids }, status: 'approved' },
       include: {
-        user: { select: { profile: { select: { displayName: true, avatarUrl: true } } } },
+        professional: {
+          include: {
+            user: { select: { profile: { select: { displayName: true, avatarUrl: true } } } },
+          },
+        },
       },
     });
-    const map = new Map(pros.map((p) => [p.id, p]));
-    return favs
-      .map((f) => ({ ...f, professional: map.get(f.professionalId) }))
-      .filter((f) => f.professional);
+    return favs.filter(
+      (f) => f.professional && f.professional.status === 'approved',
+    );
   }
 
   async add(userId: string, professionalId: string) {
