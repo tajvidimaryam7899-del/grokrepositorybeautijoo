@@ -4,7 +4,8 @@
   "private": true,
   "description": "Beautijoo - Persian RTL marketplace and booking platform for beauty professionals",
   "scripts": {
-    "build": "cd frontend && npm install && npm run build && rm -rf ../.next && cp -a .next ../.next && mkdir -p ../.next/standalone/.next && cp -a .next/static ../.next/standalone/.next/static && if [ -d public ]; then cp -a public/. ../.next/standalone/public/ 2>/dev/null || true; fi && if [ -f ../.next/standalone/server.js ]; then mv ../.next/standalone/server.js ../.next/standalone/next-server.js && printf '%s\\n' \"process.env.HOSTNAME = '0.0.0.0';\" \"process.chdir(__dirname);\" \"require('./next-server.js');\" > ../.next/standalone/server.js; fi && mkdir -p ../public && if [ -d public ]; then cp -a public/. ../public/ 2>/dev/null || true; fi",
+    "build": "cd frontend && npm install && npm run build && rm -rf ../.next ../public && cp -a .next ../.next && mkdir -p ../.next/standalone/.next && cp -a .next/static ../.next/standalone/.next/static && mkdir -p ../.next/standalone/public && if [ -d public ]; then cp -a public/. ../.next/standalone/public/; fi && mkdir -p ../public && if [ -d public ]; then cp -a public/. ../public/; fi && test -f ../.next/standalone/server.js",
+    "start": "HOSTNAME=0.0.0.0 node .next/standalone/server.js",
     "backend:dev": "cd backend && npm run start:dev",
     "backend:build": "cd backend && npm run build",
     "backend:test": "cd backend && npm run test",
