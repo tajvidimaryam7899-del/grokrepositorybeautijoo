@@ -8,7 +8,7 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as argon2 from 'argon2';
-import { createHash, randomInt } from 'crypto';
+import { createHash, randomInt, randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { SMS_PROVIDER, SmsProvider } from '../sms/sms.provider';
 import { RegisterDto, LoginDto, RequestOtpDto, VerifyOtpDto } from './dto/auth.dto';
@@ -32,8 +32,9 @@ export class AuthService {
       secret: this.config.get('jwt.accessSecret'),
       expiresIn: this.config.get('jwt.accessTtl') || '15m',
     });
+    // jti ensures unique refresh tokens even when issued in the same second
     const refreshToken = await this.jwt.signAsync(
-      { ...payload, type: 'refresh' },
+      { ...payload, type: 'refresh', jti: randomUUID() },
       {
         secret: this.config.get('jwt.refreshSecret'),
         expiresIn: this.config.get('jwt.refreshTtl') || '7d',
