@@ -9,6 +9,25 @@ import { PrismaService } from '../prisma/prisma.service';
 import { BookingStatus, Prisma } from '@prisma/client';
 import { AvailabilityService } from '../availability/availability.service';
 
+const TEHRAN_OFFSET_MS = 3.5 * 60 * 60 * 1000;
+
+/** Format instant as HH:MM in Asia/Tehran. */
+function tehranHHMM(d: Date): string {
+  const local = new Date(d.getTime() + TEHRAN_OFFSET_MS);
+  const h = local.getUTCHours();
+  const m = local.getUTCMinutes();
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+/** YYYY-MM-DD in Tehran for an instant. */
+function tehranDateStr(d: Date): string {
+  const local = new Date(d.getTime() + TEHRAN_OFFSET_MS);
+  const y = local.getUTCFullYear();
+  const mo = String(local.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(local.getUTCDate()).padStart(2, '0');
+  return `${y}-${mo}-${day}`;
+}
+
 @Injectable()
 export class BookingsService {
   constructor(
@@ -52,16 +71,16 @@ export class BookingsService {
     }
     const endAt = new Date(startAt.getTime() + totalDuration * 60_000);
 
-    const dateStr = startAt.toISOString().slice(0, 10);
+    const dateStr = tehranDateStr(startAt);
+    const startHHMM = tehranHHMM(startAt);
     const avail = await this.availability.getSlots(
       data.professionalId,
       dateStr,
       totalDuration,
     );
-    const startHHMM = startAt.toISOString().slice(11, 16);
     const slotOk = avail.slots.some((s: { start: string; end: string }) => s.start === startHHMM);
-    if (!slotOk && avail.slots.length > 0) {
-      // timezone edge: still try create; DB will reject overlap
+    if (!slotOk) {
+      throw new ConflictException('این بازه زمانی در دسترس نیست');
     }
 
     try {
