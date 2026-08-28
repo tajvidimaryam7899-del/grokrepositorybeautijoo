@@ -11,6 +11,7 @@ import * as argon2 from 'argon2';
 import { createHash, randomInt, randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { SMS_PROVIDER, SmsProvider } from '../sms/sms.provider';
+import { ProfessionalStatus } from '@prisma/client';
 import { RegisterDto, LoginDto, RequestOtpDto, VerifyOtpDto } from './dto/auth.dto';
 
 /** Parse JWT-style TTL (e.g. 15m, 7d, 24h) to milliseconds. */
@@ -65,6 +66,16 @@ export class AuthService {
   }
 
   async register(dto: RegisterDto) {
+    // Defensive: never silently map admin/staff/unknown → customer (ValidationPipe is primary gate).
+    const rawRole = dto.role;
+    if (rawRole === undefined || rawRole === null || rawRole === 'customer') {
+      // default path
+    } else if (rawRole !== 'professional') {
+      throw new BadRequestException('نقش ثبت‌نام فقط customer یا professional مجاز است');
+    }
+    const requestedRole: 'customer' | 'professional' =
+      rawRole === 'professional' ? 'professional' : 'customer';
+
     const existing = await this.prisma.user.findUnique({ where: { phone: dto.phone } });
     if (existing) throw new ConflictException('این شماره قبلاً ثبت شده است');
 
@@ -72,24 +83,80 @@ export class AuthService {
     const customerRole = await this.prisma.role.findUnique({ where: { name: 'customer' } });
     if (!customerRole) throw new BadRequestException('نقش مشتری تعریف نشده — seed را اجرا کنید');
 
-    const user = await this.prisma.user.create({
-      data: {
-        phone: dto.phone,
-        passwordHash,
-        phoneVerified: false,
-        profile: {
-          create: {
-            displayName: dto.displayName || dto.phone,
+    if (requestedRole === 'customer') {
+      const user = await this.prisma.user.create({
+        data: {
+          phone: dto.phone,
+          passwordHash,
+          phoneVerified: false,
+          profile: {
+            create: {
+              displayName: dto.displayName || dto.phone,
+            },
+          },
+          userRoles: {
+            create: { roleId: customerRole.id },
           },
         },
-        userRoles: {
-          create: { roleId: customerRole.id },
+      });
+      const tokens = await this.issueTokens(user.id, user.phone);
+      return { user: { id: user.id, phone: user.phone, roles: ['customer'] }, ...tokens };
+    }
+
+    // professional registration — atomic: user + roles + professional
+    const proRole = await this.prisma.role.findUnique({ where: { name: 'professional' } });
+    if (!proRole) throw new BadRequestException('نقش زیباگر تعریف نشده — seed را اجرا کنید');
+
+    const title = (dto.displayName && dto.displayName.trim()) || 'زیباگر';
+    // Unique slug: same uniqueness pattern as ProfessionalsService.createForUser (no parallel slug system)
+    let slug = `z-${dto.phone}`;
+    const slugTaken = await this.prisma.professional.findUnique({ where: { slug } });
+    if (slugTaken) {
+      slug = `z-${dto.phone}-${Date.now().toString(36)}`;
+    }
+
+    const user = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.user.create({
+        data: {
+          phone: dto.phone,
+          passwordHash,
+          phoneVerified: false,
+          profile: {
+            create: {
+              displayName: title,
+            },
+          },
+          userRoles: {
+            create: [
+              { roleId: customerRole.id },
+              { roleId: proRole.id },
+            ],
+          },
+          professional: {
+            create: {
+              slug,
+              title,
+              status: ProfessionalStatus.pending_review,
+            },
+          },
         },
-      },
+        include: {
+          userRoles: { include: { role: true } },
+          professional: true,
+        },
+      });
+      return created;
     });
 
     const tokens = await this.issueTokens(user.id, user.phone);
-    return { user: { id: user.id, phone: user.phone }, ...tokens };
+    return {
+      user: {
+        id: user.id,
+        phone: user.phone,
+        roles: user.userRoles.map((r) => r.role.name),
+      },
+      ...tokens,
+    };
   }
 
   async login(dto: LoginDto) {
