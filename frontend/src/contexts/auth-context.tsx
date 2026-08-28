@@ -28,7 +28,8 @@ type AuthContextValue = {
     phone: string,
     password: string,
     displayName?: string,
-  ) => Promise<void>;
+    role?: 'customer' | 'professional',
+  ) => Promise<AuthMeResponse>;
   requestOtp: (phone: string, purpose?: string) => Promise<{ expiresIn: number }>;
   verifyOtp: (phone: string, code: string, purpose?: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -88,11 +89,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const register = useCallback(
-    async (phone: string, password: string, displayName?: string) => {
-      const res = await authApi.register({ phone, password, displayName });
+    async (
+      phone: string,
+      password: string,
+      displayName?: string,
+      role?: 'customer' | 'professional',
+    ) => {
+      const res = await authApi.register({ phone, password, displayName, role });
       setTokens(res.accessToken, res.refreshToken);
       const me = await authApi.me(res.accessToken);
       setUser(me);
+      return me;
     },
     [],
   );

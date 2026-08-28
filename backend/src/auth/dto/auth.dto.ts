@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsOptional, MinLength, Matches, Length } from 'class-validator';
+import { IsString, IsOptional, MinLength, Matches, Length, IsIn } from 'class-validator';
 
 export class RegisterDto {
   @ApiProperty({ example: '09123456789' })
@@ -16,6 +16,14 @@ export class RegisterDto {
   @IsOptional()
   @IsString()
   displayName?: string;
+
+  /** Only customer | professional allowed on public registration. Backend rejects admin/staff. */
+  @ApiPropertyOptional({ example: 'customer', enum: ['customer', 'professional'] })
+  @IsOptional()
+  @IsIn(['customer', 'professional'], {
+    message: 'نقش ثبت‌نام فقط customer یا professional مجاز است',
+  })
+  role?: 'customer' | 'professional';
 }
 
 export class LoginDto {

@@ -16,7 +16,7 @@ export type AuthLoginResponse = AuthTokens & {
 };
 
 export type AuthRegisterResponse = AuthTokens & {
-  user: { id: string; phone: string | null };
+  user: { id: string; phone: string | null; roles?: string[] };
 };
 
 export type AuthMeResponse = {
@@ -47,6 +47,8 @@ export type RegisterPayload = {
   phone: string;
   password: string;
   displayName?: string;
+  /** Public registration: only customer | professional (backend validates) */
+  role?: 'customer' | 'professional';
 };
 
 export type LoginPayload = {
