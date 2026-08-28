@@ -9,18 +9,25 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 
+type RegisterRole = 'customer' | 'professional';
+
 export default function RegisterPage() {
-  const { register, isAuthenticated } = useAuth();
+  const { register, isAuthenticated, hasRole } = useAuth();
   const router = useRouter();
 
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
+  const [role, setRole] = useState<RegisterRole>('customer');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   if (isAuthenticated) {
-    router.replace('/panel');
+    if (hasRole('professional')) {
+      router.replace('/zibagar');
+    } else {
+      router.replace('/panel');
+    }
   }
 
   async function onSubmit(e: FormEvent) {
@@ -36,12 +43,15 @@ export default function RegisterPage() {
     }
     setLoading(true);
     try {
-      await register(
+      const me = await register(
         phone.trim(),
         password,
         displayName.trim() || undefined,
+        role,
       );
-      router.replace('/panel');
+      // Backend/Auth is source of truth — not local UI state
+      const isPro = me.roles?.includes('professional') ?? false;
+      router.replace(isPro ? '/zibagar' : '/panel');
     } catch (err) {
       const msg =
         err instanceof ApiError
@@ -57,17 +67,51 @@ export default function RegisterPage() {
     <div className="mx-auto flex max-w-md flex-col gap-6 px-4 py-12">
       <div className="text-center">
         <h1 className="text-2xl font-bold">ثبت‌نام در Beautijoo</h1>
-        <p className="mt-2 text-sm text-gray">ایجاد حساب مشتری</p>
+        <p className="mt-2 text-sm text-gray">ایجاد حساب کاربری</p>
       </div>
 
       <Card>
         <form onSubmit={onSubmit} className="space-y-4">
           <div>
+            <p className="mb-2 text-sm font-medium">ثبت‌نام به‌عنوان</p>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setRole('customer')}
+                className={`rounded-xl border px-3 py-3 text-sm font-medium transition ${
+                  role === 'customer'
+                    ? 'border-coral bg-coral-soft text-coral'
+                    : 'border-border text-gray hover:bg-gray-light'
+                }`}
+              >
+                کاربر
+              </button>
+              <button
+                type="button"
+                onClick={() => setRole('professional')}
+                className={`rounded-xl border px-3 py-3 text-sm font-medium transition ${
+                  role === 'professional'
+                    ? 'border-coral bg-coral-soft text-coral'
+                    : 'border-border text-gray hover:bg-gray-light'
+                }`}
+              >
+                زیباگر
+              </button>
+            </div>
+            {role === 'professional' && (
+              <p className="mt-2 text-xs text-gray">
+                پس از ثبت‌نام وارد پنل زیباگر می‌شوید. پروفایل تا تأیید مدیریت در وضعیت بررسی باقی می‌ماند.
+              </p>
+            )}
+          </div>
+          <div>
             <label className="mb-1.5 block text-sm font-medium">نام نمایشی</label>
             <Input
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
-              placeholder="مثلاً مریم رضایی"
+              placeholder={
+                role === 'professional' ? 'مثلاً متخصص پوست و مو' : 'مثلاً مریم رضایی'
+              }
               autoComplete="name"
             />
           </div>
@@ -103,7 +147,7 @@ export default function RegisterPage() {
             </p>
           )}
           <Button type="submit" className="w-full" loading={loading}>
-            ثبت‌نام
+            {role === 'professional' ? 'ثبت‌نام به‌عنوان زیباگر' : 'ثبت‌نام'}
           </Button>
         </form>
 
