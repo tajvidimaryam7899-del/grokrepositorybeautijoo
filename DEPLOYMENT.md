@@ -1,29 +1,203 @@
 # Beautijoo — Production Deployment Guide
 
-Two independent production packages (backend ZIP + frontend ZIP) are uploaded manually to Liara (or any Node + PostgreSQL host). Do **not** put real secrets in the repository.
+This document describes the current repository state and the target controlled-release architecture (Option B — Balanced).
 
-## Architecture (unchanged)
+Do **not** put real secrets in the repository or in ZIP artifacts.
 
-| Component | Stack |
-|-----------|--------|
+---
+
+## 1. Current State (as of main @ 7baa6eb)
+
+| Component | Stack / Notes |
+|-----------|---------------|
 | Backend | NestJS + Prisma + PostgreSQL (`/api/v1`) |
-| Frontend | Next.js App Router (RTL Persian) |
+| Frontend | Next.js App Router (RTL Persian), `output: 'standalone'` |
 | Auth | JWT access + refresh rotation, OTP (SMS provider abstraction) |
 | Payments / SMS / Storage | Provider interfaces (mock in dev; real providers via env) |
 
+### Backend deployment path (repository side)
+
+```
+main
+  → (previously) push to main triggered subtree split
+  → beautijoo-backend-export
+  → (Liara connection status: NOT VERIFIED — LIARA ACCESS REQUIRED)
+```
+
+Backend Docker image (from `backend/Dockerfile`):
+
+- Node 22
+- `prisma generate` + `nest build`
+- On start: `prisma migrate deploy` → `seed-roles` → `node dist/main.js`
+- Port 3000
+
+`backend/liara.json`:
+
+```json
+{
+  "platform": "docker",
+  "port": 3000
+}
+```
+
+### Frontend deployment path
+
+- Next.js standalone build
+- `frontend/liara.json` currently contains only `{ "port": 3000 }`
+- No `frontend/Dockerfile`
+- Production ZIP artifacts are produced by the workflow `Build & Package Production Artifacts (No Deploy)`
+- Actual Liara Frontend service name, branch binding, Auto Deploy status, and deployed SHA: **NOT VERIFIED — LIARA ACCESS REQUIRED**
+
+### Important limitations of the previous model
+
+- Ordinary merges to `main` could update the backend export branch.
+- Frontend and Backend could drift in version.
+- ZIP artifact was easy to confuse with a real deployment.
+- `NEXT_PUBLIC_*` variables are injected at **build time** in Next.js.
+
 ---
 
-## 1. PostgreSQL
+## 2. Target Architecture — Option B (Balanced)
 
-1. Create a PostgreSQL instance (Liara DB or external).
-2. Copy the connection string as `DATABASE_URL` (include `?schema=public` if required).
-3. Backend must be able to reach the DB from the app host.
+Goal: controlled releases with version pinning, without redesigning the running production system.
+
+```
+                main
+                 │
+             CI passes
+                 │
+                 ▼
+            Git Tag vX.Y.Z
+                 │
+        ┌────────┴────────┐
+        │                 │
+        ▼                 ▼
+     Backend           Frontend
+  (subtree from     (build with
+   same tag)         NEXT_PUBLIC_*)
+        │                 │
+        └────────┬────────┘
+                 ▼
+          Production Release
+```
+
+**Core principles**
+
+- **CI ≠ Build ≠ Deploy**
+- **ZIP artifact ≠ Deployment**
+- A normal merge to `main` must **not** update the backend deployment branch.
+- Only an intentional Git Tag (`v*`) or a manually controlled `workflow_dispatch` with an explicit `ref` may update `beautijoo-backend-export`.
+- Frontend and Backend of a release should correspond to the same tag.
+
+### Semantic Versioning
+
+Tags follow:
+
+```
+vMAJOR.MINOR.PATCH
+```
+
+Examples: `v1.0.0`, `v1.1.0`, `v1.1.1`
+
+- **Major** — breaking API / architectural change
+- **Minor** — backward-compatible feature
+- **Patch** — bug / security / fix
+
+### Backend export (controlled)
+
+Workflow: `.github/workflows/sync-backend-deploy-branch.yml`
+
+- Triggers **only** on:
+  - `push` of tags matching `v*`
+  - `workflow_dispatch` **with a required `ref` input**
+- Checks out the exact selected ref/tag
+- Runs `git subtree split --prefix=backend` from that commit
+- Force-pushes **only** to `beautijoo-backend-export`
+- Never force-pushes `main` or any other branch
+
+### Frontend build notes
+
+`NEXT_PUBLIC_*` variables are **build-time**:
+
+- `NEXT_PUBLIC_API_URL`
+- `NEXT_PUBLIC_APP_URL`
+- `NEXT_PUBLIC_APP_NAME`
+
+They must be set to production values **before** `next build`. Changing them later on the host does not update the already-built client bundle.
+
+### Backend runtime environment variables
+
+Never commit real secrets. Required at runtime (host / Liara env UI):
+
+| Variable | Required | Notes |
+|----------|----------|--------|
+| `NODE_ENV` | yes | `production` |
+| `PORT` | yes | Platform-assigned |
+| `DATABASE_URL` | yes | PostgreSQL connection string |
+| `JWT_ACCESS_SECRET` | yes | ≥ 32 characters |
+| `JWT_REFRESH_SECRET` | yes | ≥ 32 characters, different from access |
+| `CORS_ORIGINS` | yes | Exact frontend origin(s) |
+| `JWT_ACCESS_TTL` / `JWT_REFRESH_TTL` | no | defaults exist |
+| SMS / Payment / Storage providers | no | mock until configured |
+
+Actual values present on Liara: **NOT VERIFIED — LIARA ACCESS REQUIRED**
 
 ---
 
-## 2. Backend deploy
+## 3. Build vs Deploy
 
-### Build (on CI or locally before ZIP)
+| Stage | What it does | What it does **not** do |
+|-------|--------------|--------------------------|
+| CI | Typecheck + build validation | Deploy |
+| Build / Package (ZIP workflow) | Produces ZIP artifacts | Deploy to Liara |
+| Deploy | Publish a specific release to production | (must be intentional) |
+
+The workflow named **Build & Package Production Artifacts (No Deploy)** only creates artifacts. Uploading a ZIP or connecting a branch in Liara is a separate, operator-controlled step.
+
+---
+
+## 4. Rollback
+
+Rollback is **version/tag based**.
+
+Example:
+
+- Current production intended to be `v1.2.0`
+- Problem discovered → roll back to previous known-good tag `v1.1.1`
+
+**Critical rule:**
+
+> **Code rollback ≠ Database rollback**
+
+Backend containers run `prisma migrate deploy` on startup. Reverting application code does **not** reverse schema changes that have already been applied. Future migrations should follow an expand → migrate → contract pattern whenever possible.
+
+Before any rollback, verify:
+
+- Database migration compatibility
+- API compatibility between Frontend and Backend of the target tag
+- That both FE and BE of the chosen tag are deployed together
+
+---
+
+## 5. Liara status
+
+The following are **not verified** from repository evidence and must not be assumed:
+
+- Frontend service name
+- Backend service name
+- Whether Auto Deploy is enabled
+- Which branch (if any) is bound in Liara
+- Actual deployed SHAs
+- Environment variable values
+- Deployment / rollback history
+
+All of the above: **NOT VERIFIED — LIARA ACCESS REQUIRED**
+
+---
+
+## 6. Practical build commands (for operators)
+
+### Backend (before packaging or Docker build)
 
 ```bash
 cd backend
@@ -32,99 +206,35 @@ npx prisma generate
 npm run build
 ```
 
-`postinstall` runs `prisma generate`. Production start uses compiled output:
-
-```bash
-npm run start:prod   # node dist/main
-```
-
-### Migrations (against production DB)
-
-```bash
-export DATABASE_URL="postgresql://..."
-npx prisma migrate deploy
-# Optional one-time seed (change default admin password immediately):
-# npm run prisma:seed
-```
-
-### Required environment variables
-
-| Variable | Required | Notes |
-|----------|----------|--------|
-| `NODE_ENV` | yes | `production` |
-| `PORT` | yes | Platform-assigned port (e.g. Liara) |
-| `DATABASE_URL` | yes | PostgreSQL connection string |
-| `JWT_ACCESS_SECRET` | yes | ≥ 32 characters; **no default in production** |
-| `JWT_REFRESH_SECRET` | yes | ≥ 32 characters; different from access secret |
-| `JWT_ACCESS_TTL` | no | default `15m` |
-| `JWT_REFRESH_TTL` | no | default `7d` |
-| `CORS_ORIGINS` | yes | Comma-separated frontend origins, e.g. `https://beautijoo.ir` |
-| `SMS_PROVIDER` | no | `mock` until Iranian SMS is configured |
-| `PAYMENT_PROVIDER` | no | `mock` until real gateway is configured |
-| `STORAGE_PROVIDER` | no | `local` or configured provider |
-| `STORAGE_LOCAL_PATH` | no | default `./uploads` |
-| `OTP_TTL_SECONDS` | no | default `300` |
-| `OTP_MAX_ATTEMPTS` | no | default `5` |
-
-Never commit real secrets. Use platform secret store / env UI.
-
-### Health
-
-- `GET /api/v1/health` (public)
-- Swagger (if enabled in build): `/api/docs`
-
----
-
-## 3. Frontend deploy
-
-### Build
+### Frontend (production values must be set before build)
 
 ```bash
 cd frontend
-npm ci
-# Set public env *before* build (Next inlines NEXT_PUBLIC_* at build time)
-export NEXT_PUBLIC_API_URL="https://api.example.com/api/v1"
-export NEXT_PUBLIC_APP_URL="https://www.example.com"
+export NEXT_PUBLIC_API_URL="https://api.beautijoo.ir/api/v1"
+export NEXT_PUBLIC_APP_URL="https://beautijoo.ir"
 export NEXT_PUBLIC_APP_NAME="Beautijoo"
+npm ci
 npm run build
-npm run start   # respects PORT from the host
 ```
 
-### Required environment variables
+---
 
-| Variable | Required | Notes |
-|----------|----------|--------|
-| `NEXT_PUBLIC_API_URL` | yes | Backend base including `/api/v1` (no trailing slash required; client strips it) |
-| `NEXT_PUBLIC_APP_URL` | yes | Canonical site origin for SEO / OG |
-| `NEXT_PUBLIC_APP_NAME` | no | default `Beautijoo` |
-| `PORT` | yes | Host-assigned; `next start` reads `PORT` |
+## 7. Post-deploy checklist (operator)
 
-Fallback `localhost` values in source are **dev-only**. Production builds must set the variables above before `next build`.
+- [ ] Backend health: `GET /api/v1/health`
+- [ ] Frontend loads and can reach the API (no CORS errors)
+- [ ] Login / registration path works
+- [ ] Booking flow functions end-to-end
+- [ ] Confirm the running Frontend and Backend correspond to the same release tag
+- [ ] Rotate any seed admin credentials if seed was executed
 
 ---
 
-## 4. CORS and domain
+## 8. What this guide deliberately does not claim
 
-1. Set backend `CORS_ORIGINS` to the exact frontend origin(s) (scheme + host, no path).
-2. Point domain DNS to the frontend host; API subdomain (or path) to the backend host.
-3. Enable HTTPS on the platform.
+- Real Liara service configuration
+- Auto Deploy status
+- Live environment variable values
+- Deployment history or current live SHAs
 
----
-
-## 5. Post-deploy checklist
-
-- [ ] `prisma migrate deploy` succeeded
-- [ ] Backend health returns OK
-- [ ] Frontend loads and calls API (no CORS errors)
-- [ ] Login / OTP path works (SMS still mock until configured)
-- [ ] Booking flow: profile → `/booking/[slug]` → slots from API → create booking
-- [ ] Rotate seed admin password if seed was run
-- [ ] Configure real **payment gateway** and **Iranian SMS** via existing provider abstractions
-
----
-
-## 6. What this guide does not cover
-
-- Creating Liara projects or uploading ZIP files (manual step by operator)
-- Purchasing domain / SSL outside the host
-- Provider-specific SMS or payment API keys (set only in host env)
+Those require direct Liara access and remain out of scope for repository documentation until verified.

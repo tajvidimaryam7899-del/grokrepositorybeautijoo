@@ -1,4 +1,8 @@
-name: Build Production ZIPs
+# This workflow only builds and packages production ZIP artifacts.
+# It does NOT deploy to Liara or any production host.
+# BUILD ≠ DEPLOY
+# ZIP artifact ≠ production deployment
+name: Build & Package Production Artifacts (No Deploy)
 
 on:
   workflow_dispatch:
