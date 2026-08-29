@@ -216,6 +216,7 @@ model Professional {
   ratingCount     Int                @default(0) @map("rating_count")
   isFeatured      Boolean            @default(false) @map("is_featured")
   verifiedAt      DateTime?          @map("verified_at") @db.Timestamptz
+  publishedAt     DateTime?          @map("published_at") @db.Timestamptz
   coverImageUrl   String?            @map("cover_image_url") @db.VarChar(512)
   createdAt       DateTime           @default(now()) @map("created_at") @db.Timestamptz
   updatedAt       DateTime           @updatedAt @map("updated_at") @db.Timestamptz
