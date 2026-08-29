@@ -1,6 +1,9 @@
 'use client';
 import type { ReactNode } from 'react';
+import { usePathname } from 'next/navigation';
 import { PanelShell } from '@/components/panel/panel-shell';
+import { RequireAuth } from '@/components/auth/require-auth';
+
 const ITEMS = [
   { href: '/zibagar', label: 'داشبورد' },
   { href: '/zibagar/bookings', label: 'رزروها' },
@@ -11,6 +14,27 @@ const ITEMS = [
   { href: '/zibagar/notifications', label: 'اعلان‌ها' },
   { href: '/zibagar/settings', label: 'تنظیمات' },
 ];
+
 export default function ZibagarLayout({ children }: { children: ReactNode }) {
-  return <PanelShell title="پنل زیباگر" items={ITEMS} roles={['professional', 'admin']}>{children}</PanelShell>;
+  const pathname = usePathname() || '';
+  if (pathname.startsWith('/zibagar/profile/complete')) {
+    return (
+      <RequireAuth roles={['professional', 'admin']}>
+        <div className="min-h-screen bg-gray-light">
+          <header className="border-b border-border bg-white">
+            <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-3">
+              <span className="text-sm font-bold text-coral">تکمیل پروفایل زیباگر</span>
+              <a href="/zibagar" className="text-sm text-blue hover:underline">ذخیره و خروج به پنل</a>
+            </div>
+          </header>
+          <div className="mx-auto max-w-3xl px-4 py-6">{children}</div>
+        </div>
+      </RequireAuth>
+    );
+  }
+  return (
+    <PanelShell title="پنل زیباگر" items={ITEMS} roles={['professional', 'admin']}>
+      {children}
+    </PanelShell>
+  );
 }

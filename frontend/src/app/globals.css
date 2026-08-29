@@ -1,34 +1,25 @@
 @import "tailwindcss";
 
 @theme {
-  /* Brand — user palette + neutrals */
-  --color-coral: #ed6361;
-  --color-coral-light: #ca7b77;
-  --color-coral-soft: #fceceb;
-  --color-blue: #384579;
-  --color-blue-light: #e8eaf2;
-  --color-white: #ffffff;
-  --color-gray: #6b7280;
-  --color-gray-light: #f3f4f6;
+  --color-coral: #FF6F61;
+  --color-coral-light: #FFB6A6;
+  --color-coral-soft: #FFE6E2;
+  --color-blue: #2D6CDF;
+  --color-blue-light: #E7F1FF;
+  --color-white: #FFFFFF;
+  --color-gray: #6B7280;
+  --color-gray-light: #F3F4F6;
   --color-gray-dark: #374151;
   --color-foreground: #1f2937;
   --color-border: #e5e7eb;
   --font-sans: "Vazirmatn", ui-sans-serif, system-ui, sans-serif;
 }
 
-html {
-  direction: rtl;
-}
-
+html { direction: rtl; }
 body {
   font-family: var(--font-sans);
   color: var(--color-foreground);
   background: var(--color-white);
   -webkit-font-smoothing: antialiased;
 }
-
-/* LTR fields (phone, codes) */
-[dir="ltr"] {
-  direction: ltr;
-  text-align: left;
-}
+[dir="ltr"] { direction: ltr; text-align: left; }
