@@ -14,7 +14,6 @@ import { SMS_PROVIDER, SmsProvider } from '../sms/sms.provider';
 import { ProfessionalStatus } from '@prisma/client';
 import { RegisterDto, LoginDto, RequestOtpDto, VerifyOtpDto } from './dto/auth.dto';
 
-/** Parse JWT-style TTL (e.g. 15m, 7d, 24h) to milliseconds. */
 function ttlToMs(ttl: string | undefined, fallbackMs: number): number {
   if (!ttl) return fallbackMs;
   const m = /^(\d+)([smhd])$/i.exec(ttl.trim());
@@ -45,7 +44,6 @@ export class AuthService {
       secret: this.config.get('jwt.accessSecret'),
       expiresIn: this.config.get('jwt.accessTtl') || '15m',
     });
-    // jti ensures unique refresh tokens even when issued in the same second
     const refreshToken = await this.jwt.signAsync(
       { ...payload, type: 'refresh', jti: randomUUID() },
       {
@@ -66,10 +64,9 @@ export class AuthService {
   }
 
   async register(dto: RegisterDto) {
-    // Defensive: never silently map admin/staff/unknown → customer (ValidationPipe is primary gate).
     const rawRole = dto.role;
     if (rawRole === undefined || rawRole === null || rawRole === 'customer') {
-      // default path
+      // default
     } else if (rawRole !== 'professional') {
       throw new BadRequestException('نقش ثبت‌نام فقط customer یا professional مجاز است');
     }
@@ -103,12 +100,10 @@ export class AuthService {
       return { user: { id: user.id, phone: user.phone, roles: ['customer'] }, ...tokens };
     }
 
-    // professional registration — atomic: user + roles + professional
     const proRole = await this.prisma.role.findUnique({ where: { name: 'professional' } });
     if (!proRole) throw new BadRequestException('نقش زیباگر تعریف نشده — seed را اجرا کنید');
 
     const title = (dto.displayName && dto.displayName.trim()) || 'زیباگر';
-    // Unique slug: same uniqueness pattern as ProfessionalsService.createForUser (no parallel slug system)
     let slug = `z-${dto.phone}`;
     const slugTaken = await this.prisma.professional.findUnique({ where: { slug } });
     if (slugTaken) {
@@ -136,7 +131,7 @@ export class AuthService {
             create: {
               slug,
               title,
-              status: ProfessionalStatus.pending_review,
+              status: ProfessionalStatus.draft,
             },
           },
         },
