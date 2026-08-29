@@ -197,7 +197,6 @@ export default function ProfileCompletePage() {
         serviceId: selectedServiceId,
         durationMin: duration,
         price,
-        isActive: true,
       });
       await load();
       setMsg('تخصص ذخیره شد');
