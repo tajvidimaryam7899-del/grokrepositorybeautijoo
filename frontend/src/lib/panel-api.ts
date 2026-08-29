@@ -1,6 +1,5 @@
 /**
  * Typed helpers for customer / professional / admin panel endpoints.
- * Uses existing apiClient only — no invented routes.
  */
 import { apiClient } from './api';
 
@@ -27,6 +26,21 @@ export type AdminStats = { users?: number; professionals?: number; bookings?: nu
 export type AdminUser = { id: string; phone?: string | null; email?: string | null; status?: string; roles?: string[]; profile?: { displayName?: string | null } | null; createdAt?: string };
 export type AdminProfessional = { id: string; slug: string; title?: string | null; status: string; user?: { phone?: string | null; profile?: { displayName?: string | null } | null } | null };
 export type AuditLogItem = { id: string; action?: string; entity?: string; entityId?: string; actorId?: string; meta?: unknown; createdAt: string };
+
+export type CompletionField = { key: string; label: string; done: boolean };
+export type ProfileCompletion = { percent: number; complete: boolean; fields: CompletionField[] };
+export type OwnProfessional = {
+  id: string; userId: string; slug: string; title: string; bio?: string | null; status: string;
+  coverImageUrl?: string | null; publishedAt?: string | null; verifiedAt?: string | null;
+  user?: { phone?: string | null; profile?: {
+    displayName?: string | null; firstName?: string | null; lastName?: string | null;
+    avatarUrl?: string | null; bio?: string | null;
+  } | null } | null;
+  locations?: Array<{ isPrimary?: boolean; location: { id: string; name: string; address: string; city: string; province?: string | null } }>;
+  professionalServices?: ProfessionalServiceItem[];
+  workingHours?: WorkingHourItem[];
+  completion?: ProfileCompletion;
+};
 
 function unwrapList<T>(res: Paginated<T> | T[]): T[] {
   if (Array.isArray(res)) return res;
@@ -74,8 +88,27 @@ export async function upsertMyService(payload: { serviceId: string; durationMin:
 export async function deactivateMyService(id: string) {
   return apiClient.delete(`/professionals/me/services/${id}`);
 }
-export async function updateMyProfessional(payload: { title?: string; bio?: string; coverImageUrl?: string }) {
-  return apiClient.patch('/professionals/me', payload);
+export async function fetchMyProfessional() {
+  return apiClient.get<OwnProfessional>('/professionals/me');
+}
+export async function fetchMyCompletion() {
+  return apiClient.get<ProfileCompletion>('/professionals/me/completion');
+}
+export async function fetchMyPreview() {
+  return apiClient.get<OwnProfessional>('/professionals/me/preview');
+}
+export async function updateMyProfessional(payload: {
+  title?: string; bio?: string; coverImageUrl?: string;
+  firstName?: string; lastName?: string; displayName?: string;
+  avatarUrl?: string; profileBio?: string;
+}) {
+  return apiClient.patch<OwnProfessional>('/professionals/me', payload);
+}
+export async function publishMyProfessional() {
+  return apiClient.post<OwnProfessional>('/professionals/me/publish');
+}
+export async function unpublishMyProfessional() {
+  return apiClient.post<OwnProfessional>('/professionals/me/unpublish');
 }
 export async function fetchMyLocations() {
   const res = await apiClient.get<LocationItem[] | Paginated<LocationItem>>('/professionals/me/locations');
