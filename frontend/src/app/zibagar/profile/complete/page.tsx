@@ -213,9 +213,9 @@ export default function ProfileCompletePage() {
   async function saveHours() {
     setSaving(true); setError(null); setMsg(null);
     try {
-      await setMyWorkingHours([
-        { dayOfWeek: hourDay, startTime: hourStart, endTime: hourEnd, isActive: true },
-      ]);
+      await setMyWorkingHours({
+        dayOfWeek: hourDay, startTime: hourStart, endTime: hourEnd,
+      });
       await load();
       setMsg('ساعات کاری ذخیره شد');
       return true;
