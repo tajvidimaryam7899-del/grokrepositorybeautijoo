@@ -11,7 +11,10 @@ export class LocationsService {
 
   async addLocation(
     userId: string,
-    data: { name: string; address: string; city: string; province?: string; isPrimary?: boolean },
+    data: {
+      name: string; address: string; city: string; province?: string;
+      latitude?: number; longitude?: number; isPrimary?: boolean;
+    },
   ) {
     const pro = await this.professionals.requireOwnProfessional(userId);
     const location = await this.prisma.location.create({
@@ -20,6 +23,8 @@ export class LocationsService {
         address: data.address,
         city: data.city,
         province: data.province,
+        latitude: data.latitude != null ? data.latitude : undefined,
+        longitude: data.longitude != null ? data.longitude : undefined,
       },
     });
     if (data.isPrimary) {
