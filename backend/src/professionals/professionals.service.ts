@@ -25,14 +25,14 @@ export type CompletionResult = {
 };
 
 const COMPLETION_LABELS: Record<CompletionFieldKey, string> = {
-  title: '\u0639\u0646\u0648\u0627\u0646 \u062d\u0631\u0641\u0647\u200c\u0627\u06cc',
-  firstName: '\u0646\u0627\u0645',
-  lastName: '\u0646\u0627\u0645 \u062e\u0627\u0646\u0648\u0627\u062f\u06af\u06cc',
-  bio: '\u0645\u0639\u0631\u0641\u06cc / \u0628\u06cc\u0648',
-  avatarOrCover: '\u062a\u0635\u0648\u06cc\u0631 \u067e\u0631\u0648\u0641\u0627\u06cc\u0644 \u06cc\u0627 \u06a9\u0627\u0648\u0631',
-  location: '\u0645\u0648\u0642\u0639\u06cc\u062a \u0645\u06a9\u0627\u0646\u06cc',
-  service: '\u062d\u062f\u0627\u0642\u0644 \u06cc\u06a9 \u062a\u062e\u0635\u0635',
-  workingHours: '\u0633\u0627\u0639\u0627\u062a \u06a9\u0627\u0631\u06cc',
+  title: 'title',
+  firstName: 'firstName',
+  lastName: 'lastName',
+  bio: 'bio',
+  avatarOrCover: 'avatarOrCover',
+  location: 'location',
+  service: 'service',
+  workingHours: 'workingHours',
 };
 
 @Injectable()
@@ -87,7 +87,7 @@ export class ProfessionalsService {
       include: this.publicInclude(),
     });
     if (!pro || pro.status !== ProfessionalStatus.approved) {
-      throw new NotFoundException('\u0632\u06cc\u0628\u0627\u06af\u0631 \u06cc\u0627\u0641\u062a \u0646\u0634\u062f');
+      throw new NotFoundException('Professional not found');
     }
     return pro;
   }
@@ -103,9 +103,9 @@ export class ProfessionalsService {
 
   async createForUser(userId: string, data: { slug: string; title: string; bio?: string }) {
     const existing = await this.prisma.professional.findUnique({ where: { userId } });
-    if (existing) throw new ConflictException('\u067e\u0631\u0648\u0641\u0627\u06cc\u0644 \u0632\u06cc\u0628\u0627\u06af\u0631 \u0642\u0628\u0644\u0627\u064b \u0627\u06cc\u062c\u0627\u062f \u0634\u062f\u0647 \u0627\u0633\u062a');
+    if (existing) throw new ConflictException('Already exists');
     const slugTaken = await this.prisma.professional.findUnique({ where: { slug: data.slug } });
-    if (slugTaken) throw new ConflictException('\u0627\u06cc\u0646 \u0627\u0633\u0644\u0627\u06af \u0642\u0628\u0644\u0627\u064b \u0627\u0633\u062a\u0641\u0627\u062f\u0647 \u0634\u062f\u0647 \u0627\u0633\u062a');
+    if (slugTaken) throw new ConflictException('Slug taken');
     const proRole = await this.prisma.role.findUnique({ where: { name: 'professional' } });
     if (proRole) {
       await this.prisma.userRole.upsert({
@@ -128,12 +128,12 @@ export class ProfessionalsService {
     avatarUrl?: string; profileBio?: string;
   }) {
     const pro = await this.prisma.professional.findUnique({ where: { userId } });
-    if (!pro) throw new NotFoundException('\u067e\u0631\u0648\u0641\u0627\u06cc\u0644 \u0632\u06cc\u0628\u0627\u06af\u0631 \u06cc\u0627\u0641\u062a \u0646\u0634\u062f');
+    if (!pro) throw new NotFoundException('Not found');
 
     const proData: Prisma.ProfessionalUpdateInput = {};
     if (data.title !== undefined) {
       const t = data.title.trim();
-      if (t.length < 2) throw new BadRequestException('\u0639\u0646\u0648\u0627\u0646 \u0628\u0627\u06cc\u062f \u062d\u062f\u0627\u0642\u0644 \u06f2 \u06a9\u0627\u0631\u0627\u06a9\u062a\u0631 \u0628\u0627\u0634\u062f');
+      if (t.length < 2) throw new BadRequestException('Title too short');
       proData.title = t;
     }
     if (data.bio !== undefined) proData.bio = data.bio.trim() || null;
@@ -165,41 +165,41 @@ export class ProfessionalsService {
     const completion = this.computeCompletion(pro);
     if (!completion.complete) {
       throw new BadRequestException({
-        message: '\u067e\u0631\u0648\u0641\u0627\u06cc\u0644 \u0647\u0646\u0648\u0632 \u06a9\u0627\u0645\u0644 \u0646\u0634\u062f\u0647 \u0627\u0633\u062a.',
+        message: 'Profile incomplete',
         completion,
       });
     }
     if (pro.status === ProfessionalStatus.suspended) {
-      throw new ForbiddenException('\u067e\u0631\u0648\u0641\u0627\u06cc\u0644 \u0645\u0639\u0644\u0642 \u0627\u0633\u062a \u0648 \u0642\u0627\u0628\u0644 \u0627\u0646\u062a\u0634\u0627\u0631 \u0646\u06cc\u0633\u062a');
+      throw new ForbiddenException('Suspended');
     }
+    // Use verifiedAt as publish timestamp (compatible with current schema without publishedAt)
     const updated = await this.prisma.professional.update({
       where: { id: pro.id },
       data: {
         status: ProfessionalStatus.approved,
-        publishedAt: new Date(),
         verifiedAt: pro.verifiedAt ?? new Date(),
       },
       include: this.publicInclude(),
     });
-    return { ...updated, completion };
+    return { ...updated, completion, publishedAt: updated.verifiedAt };
   }
 
   async unpublish(userId: string) {
     const pro = await this.prisma.professional.findUnique({ where: { userId } });
-    if (!pro) throw new NotFoundException('\u067e\u0631\u0648\u0641\u0627\u06cc\u0644 \u0632\u06cc\u0628\u0627\u06af\u0631 \u06cc\u0627\u0641\u062a \u0646\u0634\u062f');
+    if (!pro) throw new NotFoundException('Not found');
     if (pro.status !== ProfessionalStatus.approved) {
-      throw new BadRequestException('\u067e\u0631\u0648\u0641\u0627\u06cc\u0644 \u062f\u0631 \u0648\u0636\u0639\u06cc\u062a \u0645\u0646\u062a\u0634\u0631\u0634\u062f\u0647 \u0646\u06cc\u0633\u062a');
+      throw new BadRequestException('Not published');
     }
     await this.prisma.professional.update({
       where: { id: pro.id },
-      data: { status: ProfessionalStatus.draft, publishedAt: null },
+      data: { status: ProfessionalStatus.draft },
     });
     return this.getOwn(userId);
   }
 
   async requireOwnProfessional(userId: string) {
     const pro = await this.prisma.professional.findUnique({ where: { userId } });
-    if (!pro) throw new ForbiddenException('\u067e\u0631\u0648\u0641\u0627\u06cc\u0644 \u0632\u06cc\u0628\u0627\u06af\u0631 \u06cc\u0627\u0641\u062a \u0646\u0634\u062f');
+    if (!pro) throw new ForbiddenException('Not found');
     return pro;
   }
 
@@ -280,7 +280,7 @@ export class ProfessionalsService {
         workingHours: { include: { breaks: true } },
       },
     });
-    if (!pro) throw new NotFoundException('\u067e\u0631\u0648\u0641\u0627\u06cc\u0644 \u0632\u06cc\u0628\u0627\u06af\u0631 \u06cc\u0627\u0641\u062a \u0646\u0634\u062f');
+    if (!pro) throw new NotFoundException('Not found');
     return pro;
   }
 }
