@@ -1,6 +1,22 @@
-import { Body, Controller, Delete, Get, Param, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { IsInt, IsOptional, IsString, IsUUID, Min } from 'class-validator';
+import {
+  IsInt,
+  IsObject,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Min,
+  MinLength,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import { ServicesService } from './services.service';
 import { Public } from '../common/decorators/public.decorator';
@@ -13,6 +29,23 @@ class UpsertProServiceDto {
   @Type(() => Number) @IsInt() @Min(0) price!: number;
   @IsOptional() @Type(() => Number) @IsInt() @Min(0) bufferMin?: number;
   @IsOptional() @IsString() description?: string;
+}
+
+class UpsertPriceRuleDto {
+  @IsOptional() @IsUUID() id?: string;
+  @IsString() @MinLength(1) label!: string;
+  @Type(() => Number) @IsInt() @Min(0) price!: number;
+  @IsOptional() @IsObject() attributes?: Record<string, unknown>;
+  @IsOptional() @Type(() => Number) @IsInt() sortOrder?: number;
+}
+
+class UpsertDurationRuleDto {
+  @IsOptional() @IsUUID() id?: string;
+  @IsString() @MinLength(1) label!: string;
+  @Type(() => Number) @IsInt() @Min(5) durationMin!: number;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(5) durationMaxMin?: number;
+  @IsOptional() @IsObject() attributes?: Record<string, unknown>;
+  @IsOptional() @Type(() => Number) @IsInt() sortOrder?: number;
 }
 
 @ApiTags('services')
@@ -51,5 +84,55 @@ export class ServicesController {
   @Delete('professionals/me/services/:id')
   deactivate(@CurrentUser('id') userId: string, @Param('id') id: string) {
     return this.service.deactivateMyService(userId, id);
+  }
+
+  @ApiBearerAuth()
+  @Roles('professional', 'admin')
+  @Get('professionals/me/services/:psId/price-rules')
+  listPriceRules(@CurrentUser('id') userId: string, @Param('psId') psId: string) {
+    return this.service.listPriceRules(userId, psId);
+  }
+
+  @ApiBearerAuth()
+  @Roles('professional', 'admin')
+  @Post('professionals/me/services/:psId/price-rules')
+  upsertPriceRule(
+    @CurrentUser('id') userId: string,
+    @Param('psId') psId: string,
+    @Body() dto: UpsertPriceRuleDto,
+  ) {
+    return this.service.upsertPriceRule(userId, psId, dto);
+  }
+
+  @ApiBearerAuth()
+  @Roles('professional', 'admin')
+  @Delete('professionals/me/price-rules/:id')
+  deactivatePriceRule(@CurrentUser('id') userId: string, @Param('id') id: string) {
+    return this.service.deactivatePriceRule(userId, id);
+  }
+
+  @ApiBearerAuth()
+  @Roles('professional', 'admin')
+  @Get('professionals/me/services/:psId/duration-rules')
+  listDurationRules(@CurrentUser('id') userId: string, @Param('psId') psId: string) {
+    return this.service.listDurationRules(userId, psId);
+  }
+
+  @ApiBearerAuth()
+  @Roles('professional', 'admin')
+  @Post('professionals/me/services/:psId/duration-rules')
+  upsertDurationRule(
+    @CurrentUser('id') userId: string,
+    @Param('psId') psId: string,
+    @Body() dto: UpsertDurationRuleDto,
+  ) {
+    return this.service.upsertDurationRule(userId, psId, dto);
+  }
+
+  @ApiBearerAuth()
+  @Roles('professional', 'admin')
+  @Delete('professionals/me/duration-rules/:id')
+  deactivateDurationRule(@CurrentUser('id') userId: string, @Param('id') id: string) {
+    return this.service.deactivateDurationRule(userId, id);
   }
 }
