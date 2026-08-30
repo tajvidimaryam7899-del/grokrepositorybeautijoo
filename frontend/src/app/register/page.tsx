@@ -24,7 +24,7 @@ export default function RegisterPage() {
 
   if (isAuthenticated) {
     if (hasRole('professional')) {
-      router.replace('/zibagar');
+      router.replace('/zibagar/profile/complete');
     } else {
       router.replace('/panel');
     }
@@ -49,9 +49,8 @@ export default function RegisterPage() {
         displayName.trim() || undefined,
         role,
       );
-      // Backend/Auth is source of truth — not local UI state
       const isPro = me.roles?.includes('professional') ?? false;
-      router.replace(isPro ? '/zibagar' : '/panel');
+      router.replace(isPro ? '/zibagar/profile/complete' : '/panel');
     } catch (err) {
       const msg =
         err instanceof ApiError
@@ -100,7 +99,7 @@ export default function RegisterPage() {
             </div>
             {role === 'professional' && (
               <p className="mt-2 text-xs text-gray">
-                پس از ثبت‌نام وارد پنل زیباگر می‌شوید. پروفایل تا تأیید مدیریت در وضعیت بررسی باقی می‌ماند.
+                پس از ثبت‌نام وارد ویزارد تکمیل پروفایل می‌شوید.
               </p>
             )}
           </div>

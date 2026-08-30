@@ -26,7 +26,7 @@ export default function ZibagarDashboard() {
       setLoading(true);
       try {
         const [bookings, services, pro] = await Promise.all([
-          fetchProBookings(1, 5),
+          fetchProBookings(1, 5).catch(() => ({ items: [] as unknown[] })),
           fetchMyServices().catch(() => []),
           fetchMyProfessional().catch(() => null),
         ]);
@@ -52,6 +52,7 @@ export default function ZibagarDashboard() {
   if (error) return <PanelError message={error} />;
   const title = user?.professional?.title || user?.profile?.displayName || 'زیباگر';
   const published = status === 'approved';
+  const showOps = published || complete;
 
   return (
     <div className="space-y-6">
@@ -84,7 +85,7 @@ export default function ZibagarDashboard() {
               <Link href="/zibagar/profile/preview">
                 <Button variant="secondary" size="sm">مشاهده پیش‌نمایش</Button>
               </Link>
-              <Link href="/zibagar/profile">
+              <Link href="/zibagar/profile/complete">
                 <Button size="sm">انتشار پروفایل</Button>
               </Link>
             </div>
@@ -93,7 +94,9 @@ export default function ZibagarDashboard() {
           <>
             <h2 className="font-semibold">تکمیل پروفایل — {percent}%</h2>
             <CompletionBar percent={percent} />
-            <p className="text-sm text-gray">پروفایل شما هنوز آماده انتشار نیست.</p>
+            <p className="text-sm text-gray">
+              برای نمایش در سایت و دریافت رزرو، ابتدا پروفایل را کامل کنید.
+            </p>
             <Link href="/zibagar/profile/complete">
               <Button size="sm">ادامه تکمیل پروفایل</Button>
             </Link>
@@ -101,24 +104,26 @@ export default function ZibagarDashboard() {
         )}
       </Card>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Card className="space-y-3">
-          <h2 className="font-semibold">رزروهای ورودی</h2>
-          <p className="text-sm text-gray">
-            {bookingCount > 0 ? `${bookingCount} مورد در صفحه اول` : 'رزرو جدیدی نیست'}
-          </p>
-          <Link href="/zibagar/bookings"><Button size="sm">مدیریت رزروها</Button></Link>
-        </Card>
-        <Card className="space-y-3">
-          <h2 className="font-semibold">تخصص‌ها</h2>
-          <p className="text-sm text-gray">
-            {serviceCount > 0 ? `${serviceCount} تخصص فعال` : 'هنوز تخصصی تعریف نشده'}
-          </p>
-          <Link href="/zibagar/services">
-            <Button size="sm" variant="secondary">مدیریت تخصص‌ها</Button>
-          </Link>
-        </Card>
-      </div>
+      {showOps && (
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Card className="space-y-3">
+            <h2 className="font-semibold">رزروهای ورودی</h2>
+            <p className="text-sm text-gray">
+              {bookingCount > 0 ? `${bookingCount} مورد در صفحه اول` : 'رزرو جدیدی نیست'}
+            </p>
+            <Link href="/zibagar/bookings"><Button size="sm">مدیریت رزروها</Button></Link>
+          </Card>
+          <Card className="space-y-3">
+            <h2 className="font-semibold">تخصص‌ها</h2>
+            <p className="text-sm text-gray">
+              {serviceCount > 0 ? `${serviceCount} تخصص فعال` : 'هنوز تخصصی تعریف نشده'}
+            </p>
+            <Link href="/zibagar/services">
+              <Button size="sm" variant="secondary">مدیریت تخصص‌ها</Button>
+            </Link>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }
