@@ -8,9 +8,16 @@ import * as path from 'path';
 export class LocalStorageProvider implements StorageProvider {
   private readonly logger = new Logger(LocalStorageProvider.name);
   private readonly basePath: string;
+  private readonly publicBase: string;
 
   constructor(private readonly config: ConfigService) {
     this.basePath = config.get<string>('storageLocalPath') || './uploads';
+    // e.g. https://api.beautijoo.ir  (no trailing slash, no /api/v1)
+    this.publicBase = (
+      process.env.PUBLIC_API_URL ||
+      process.env.API_PUBLIC_URL ||
+      ''
+    ).replace(/\/$/, '');
   }
 
   async upload(key: string, buffer: Buffer, contentType: string): Promise<string> {
@@ -30,6 +37,8 @@ export class LocalStorageProvider implements StorageProvider {
   }
 
   getPublicUrl(key: string): string {
-    return `/uploads/${key}`;
+    const rel = `/uploads/${key}`;
+    if (this.publicBase) return `${this.publicBase}${rel}`;
+    return rel;
   }
 }
