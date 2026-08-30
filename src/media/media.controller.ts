@@ -9,6 +9,7 @@ import {
   UploadedFile,
   UseInterceptors,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
@@ -18,11 +19,23 @@ import { MediaService } from './media.service';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 
+const ALLOWED_MIME = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+  'video/mp4',
+  'video/webm',
+  'video/quicktime',
+]);
+
 @ApiTags('media')
 @ApiBearerAuth()
 @Roles('professional', 'admin')
 @Controller('professionals/me/media')
 export class MediaController {
+  private readonly logger = new Logger(MediaController.name);
+
   constructor(private readonly service: MediaService) {}
 
   @Get()
@@ -37,18 +50,33 @@ export class MediaController {
       type: 'object',
       properties: {
         file: { type: 'string', format: 'binary' },
-        kind: { type: 'string' },
+        kind: { type: 'string', enum: Object.values(MediaKind) },
         professionalServiceId: { type: 'string' },
       },
+      required: ['file', 'kind'],
     },
   })
   @UseInterceptors(
     FileInterceptor('file', {
       storage: memoryStorage(),
       limits: { fileSize: 50 * 1024 * 1024 },
+      fileFilter: (_req, file, cb) => {
+        if (!file) {
+          return cb(new BadRequestException('فایل ارسال نشده است') as unknown as Error, false);
+        }
+        if (!ALLOWED_MIME.has(file.mimetype)) {
+          return cb(
+            new BadRequestException(
+              'فرمت این فایل پشتیبانی نمی‌شود. فقط JPG، PNG، WEBP، GIF یا ویدیوهای MP4/WEBM مجاز است.',
+            ) as unknown as Error,
+            false,
+          );
+        }
+        cb(null, true);
+      },
     }),
   )
-  upload(
+  async upload(
     @CurrentUser('id') userId: string,
     @UploadedFile()
     file: {
@@ -57,16 +85,34 @@ export class MediaController {
       originalname: string;
       size: number;
     },
-    @Body('kind') kind: MediaKind,
+    @Body('kind') kind: string,
     @Body('professionalServiceId') professionalServiceId?: string,
   ) {
-    if (!file) {
+    if (!file?.buffer?.length) {
       throw new BadRequestException('فایل ارسال نشده است');
     }
-    if (!kind) {
+    if (!kind || typeof kind !== 'string') {
       throw new BadRequestException('نوع تصویر (kind) الزامی است');
     }
-    return this.service.upload(userId, file, kind, professionalServiceId);
+    const normalizedKind = kind.trim().toLowerCase() as MediaKind;
+    const validKinds = Object.values(MediaKind) as string[];
+    if (!validKinds.includes(normalizedKind)) {
+      throw new BadRequestException(
+        `نوع تصویر نامعتبر است. مقادیر مجاز: ${validKinds.join(', ')}`,
+      );
+    }
+
+    this.logger.log(
+      `upload user=${userId} kind=${normalizedKind} mime=${file.mimetype} size=${file.size}`,
+    );
+
+    try {
+      return await this.service.upload(userId, file, normalizedKind, professionalServiceId);
+    } catch (err) {
+      if (err && typeof err === 'object' && 'getStatus' in err) throw err;
+      this.logger.error(`upload failed user=${userId}: ${(err as Error)?.message}`);
+      throw err;
+    }
   }
 
   @Post('publish')
