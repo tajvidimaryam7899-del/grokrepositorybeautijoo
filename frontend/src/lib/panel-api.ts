@@ -62,6 +62,16 @@ export async function fetchMyBookings(page = 1, limit = 20) {
   const res = await apiClient.get<Paginated<BookingListItem> | BookingListItem[]>(`/bookings/mine?page=${page}&limit=${limit}`);
   return { items: unwrapList(res), raw: res };
 }
+
+export async function fetchProBookings(page = 1, limit = 20) {
+  const res = await apiClient.get<Paginated<BookingListItem> | BookingListItem[]>(`/bookings/professional?page=${page}&limit=${limit}`);
+  return { items: unwrapList(res), raw: res };
+}
+
+export async function transitionBooking(id: string, action: 'confirm' | 'reject' | 'cancel' | 'complete', reason?: string) {
+  return apiClient.patch(`/bookings/${id}/${action}`, reason ? { reason } : undefined);
+}
+
 export async function fetchFavorites() {
   const res = await apiClient.get<FavoriteItem[] | Paginated<FavoriteItem>>('/favorites');
   return unwrapList(res as Paginated<FavoriteItem>);
