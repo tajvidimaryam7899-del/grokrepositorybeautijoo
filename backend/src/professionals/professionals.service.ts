@@ -1,37 +1,21 @@
 import {
   Injectable,
   NotFoundException,
-  ForbiddenException,
   ConflictException,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
+import { Prisma, ProfessionalStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { ProfessionalStatus, Prisma } from '@prisma/client';
 
-export type CompletionFieldKey =
-  | 'title'
-  | 'firstName'
-  | 'lastName'
-  | 'bio'
-  | 'avatarOrCover'
-  | 'location'
-  | 'service'
-  | 'workingHours';
-
-export type CompletionResult = {
-  percent: number;
-  complete: boolean;
-  fields: Array<{ key: CompletionFieldKey; label: string; done: boolean }>;
-};
-
-const COMPLETION_LABELS: Record<CompletionFieldKey, string> = {
+const COMPLETION_LABELS: Record<string, string> = {
   title: '\u0639\u0646\u0648\u0627\u0646 \u062d\u0631\u0641\u0647\u200c\u0627\u06cc',
   firstName: '\u0646\u0627\u0645',
   lastName: '\u0646\u0627\u0645 \u062e\u0627\u0646\u0648\u0627\u062f\u06af\u06cc',
-  bio: '\u0645\u0639\u0631\u0641\u06cc / \u0628\u06cc\u0648',
-  avatarOrCover: '\u062a\u0635\u0648\u06cc\u0631 \u067e\u0631\u0648\u0641\u0627\u06cc\u0644 \u06cc\u0627 \u06a9\u0627\u0648\u0631',
-  location: '\u0645\u0648\u0642\u0639\u06cc\u062a \u0645\u06a9\u0627\u0646\u06cc',
-  service: '\u062d\u062f\u0627\u0642\u0644 \u06cc\u06a9 \u062a\u062e\u0635\u0635',
+  bio: '\u0645\u0639\u0631\u0641\u06cc',
+  avatarOrCover: '\u062a\u0635\u0648\u06cc\u0631 \u067e\u0631\u0648\u0641\u0627\u06cc\u0644',
+  location: '\u0645\u0648\u0642\u0639\u06cc\u062a',
+  service: '\u062a\u062e\u0635\u0635',
   workingHours: '\u0633\u0627\u0639\u0627\u062a \u06a9\u0627\u0631\u06cc',
 };
 
@@ -39,57 +23,11 @@ const COMPLETION_LABELS: Record<CompletionFieldKey, string> = {
 export class ProfessionalsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async search(params: {
-    q?: string; city?: string; category?: string; page?: number; limit?: number;
-  }) {
-    const page = params.page || 1;
-    const limit = Math.min(params.limit || 20, 50);
-    const skip = (page - 1) * limit;
-    const where: Prisma.ProfessionalWhereInput = { status: ProfessionalStatus.approved };
-    if (params.q) {
-      where.OR = [
-        { title: { contains: params.q, mode: 'insensitive' } },
-        { bio: { contains: params.q, mode: 'insensitive' } },
-        { slug: { contains: params.q, mode: 'insensitive' } },
-      ];
-    }
-    if (params.city) {
-      where.locations = {
-        some: { location: { city: { contains: params.city, mode: 'insensitive' } } },
-      };
-    }
-    if (params.category) {
-      where.professionalServices = {
-        some: { service: { category: { slug: params.category } }, isActive: true },
-      };
-    }
-    const [items, total] = await Promise.all([
-      this.prisma.professional.findMany({
-        where, skip, take: limit,
-        orderBy: [{ isFeatured: 'desc' }, { ratingAvg: 'desc' }],
-        include: {
-          user: { select: { profile: { select: { displayName: true, avatarUrl: true } } } },
-          locations: { include: { location: true }, where: { isPrimary: true }, take: 1 },
-          professionalServices: {
-            where: { isActive: true }, take: 5,
-            include: { service: { select: { name: true, slug: true } } },
-          },
-        },
-      }),
-      this.prisma.professional.count({ where }),
-    ]);
-    return { items, meta: { page, limit, total } };
-  }
-
-  async findBySlug(slug: string) {
-    const pro = await this.prisma.professional.findUnique({
-      where: { slug },
-      include: this.publicInclude(),
+  requireOwnProfessional(userId: string) {
+    return this.prisma.professional.findUnique({ where: { userId } }).then((pro) => {
+      if (!pro) throw new NotFoundException('\u067e\u0631\u0648\u0641\u0627\u06cc\u0644 \u0632\u06cc\u0628\u0627\u06af\u0631 \u06cc\u0627\u0641\u062a \u0646\u0634\u062f');
+      return pro;
     });
-    if (!pro || pro.status !== ProfessionalStatus.approved) {
-      throw new NotFoundException('\u0632\u06cc\u0628\u0627\u06af\u0631 \u06cc\u0627\u0641\u062a \u0646\u0634\u062f');
-    }
-    return pro;
   }
 
   async getOwn(userId: string) {
@@ -123,7 +61,7 @@ export class ProfessionalsService {
   }
 
   async updateOwn(userId: string, data: {
-    title?: string; bio?: string; coverImageUrl?: string;
+    title?: string; bio?: string; coverImageUrl?: string; logoUrl?: string;
     firstName?: string; lastName?: string; displayName?: string;
     avatarUrl?: string; profileBio?: string;
   }) {
@@ -138,25 +76,21 @@ export class ProfessionalsService {
     }
     if (data.bio !== undefined) proData.bio = data.bio.trim() || null;
     if (data.coverImageUrl !== undefined) proData.coverImageUrl = data.coverImageUrl.trim() || null;
+    if (data.logoUrl !== undefined) proData.logoUrl = data.logoUrl.trim() || null;
 
     const profileData: Prisma.ProfileUpdateInput = {};
     if (data.firstName !== undefined) profileData.firstName = data.firstName.trim() || null;
     if (data.lastName !== undefined) profileData.lastName = data.lastName.trim() || null;
-    if (data.displayName !== undefined) {
-      const d = data.displayName.trim();
-      if (d) profileData.displayName = d;
-    }
+    if (data.displayName !== undefined) profileData.displayName = data.displayName.trim();
     if (data.avatarUrl !== undefined) profileData.avatarUrl = data.avatarUrl.trim() || null;
     if (data.profileBio !== undefined) profileData.bio = data.profileBio.trim() || null;
 
-    await this.prisma.$transaction(async (tx) => {
-      if (Object.keys(proData).length > 0) {
-        await tx.professional.update({ where: { id: pro.id }, data: proData });
-      }
-      if (Object.keys(profileData).length > 0) {
-        await tx.profile.update({ where: { userId }, data: profileData });
-      }
-    });
+    if (Object.keys(proData).length) {
+      await this.prisma.professional.update({ where: { id: pro.id }, data: proData });
+    }
+    if (Object.keys(profileData).length) {
+      await this.prisma.profile.update({ where: { userId }, data: profileData });
+    }
     return this.getOwn(userId);
   }
 
@@ -165,42 +99,28 @@ export class ProfessionalsService {
     const completion = this.computeCompletion(pro);
     if (!completion.complete) {
       throw new BadRequestException({
-        message: '\u067e\u0631\u0648\u0641\u0627\u06cc\u0644 \u0647\u0646\u0648\u0632 \u06a9\u0627\u0645\u0644 \u0646\u0634\u062f\u0647 \u0627\u0633\u062a.',
+        message: '\u067e\u0631\u0648\u0641\u0627\u06cc\u0644 \u0646\u0627\u0642\u0635 \u0627\u0633\u062a',
         completion,
       });
-    }
-    if (pro.status === ProfessionalStatus.suspended) {
-      throw new ForbiddenException('\u067e\u0631\u0648\u0641\u0627\u06cc\u0644 \u0645\u0639\u0644\u0642 \u0627\u0633\u062a');
     }
     const updated = await this.prisma.professional.update({
       where: { id: pro.id },
       data: {
         status: ProfessionalStatus.approved,
         publishedAt: new Date(),
-        verifiedAt: pro.verifiedAt ?? new Date(),
       },
-      include: this.publicInclude(),
     });
     return { ...updated, completion };
   }
 
   async unpublish(userId: string) {
     const pro = await this.prisma.professional.findUnique({ where: { userId } });
-    if (!pro) throw new NotFoundException('\u067e\u0631\u0648\u0641\u0627\u06cc\u0644 \u0632\u06cc\u0628\u0627\u06af\u0631 \u06cc\u0627\u0641\u062a \u0646\u0634\u062f');
-    if (pro.status !== ProfessionalStatus.approved) {
-      throw new BadRequestException('\u067e\u0631\u0648\u0641\u0627\u06cc\u0644 \u062f\u0631 \u0648\u0636\u0639\u06cc\u062a \u0645\u0646\u062a\u0634\u0631\u0634\u062f\u0647 \u0646\u06cc\u0633\u062a');
-    }
+    if (!pro) throw new NotFoundException();
     await this.prisma.professional.update({
       where: { id: pro.id },
       data: { status: ProfessionalStatus.draft, publishedAt: null },
     });
     return this.getOwn(userId);
-  }
-
-  async requireOwnProfessional(userId: string) {
-    const pro = await this.prisma.professional.findUnique({ where: { userId } });
-    if (!pro) throw new ForbiddenException('\u067e\u0631\u0648\u0641\u0627\u06cc\u0644 \u0632\u06cc\u0628\u0627\u06af\u0631 \u06cc\u0627\u0641\u062a \u0646\u0634\u062f');
-    return pro;
   }
 
   computeCompletion(pro: {
@@ -210,17 +130,17 @@ export class ProfessionalsService {
       avatarUrl?: string | null; bio?: string | null;
     } | null } | null;
     locations?: unknown[];
-    professionalServices?: Array<{ isActive?: boolean }>;
-    workingHours?: Array<{ isActive?: boolean }>;
-  }): CompletionResult {
+    professionalServices?: { isActive?: boolean | null }[];
+    workingHours?: { isActive?: boolean | null }[];
+  }) {
     const profile = pro.user?.profile;
     const hasTitle = !!(pro.title && pro.title.trim().length >= 2);
-    const hasFirst = !!(profile?.firstName && profile.firstName.trim().length >= 1);
-    const hasLast = !!(profile?.lastName && profile.lastName.trim().length >= 1);
-    const bioText = (pro.bio || profile?.bio || '').trim();
-    const hasBio = bioText.length >= 10;
+    const hasFirst = !!(profile?.firstName && profile.firstName.trim());
+    const hasLast = !!(profile?.lastName && profile.lastName.trim());
+    const hasBio = !!(pro.bio && pro.bio.trim()) || !!(profile?.bio && profile.bio.trim());
     const hasImage = !!(
       (pro.coverImageUrl && pro.coverImageUrl.trim()) ||
+      ((pro as { logoUrl?: string | null }).logoUrl && String((pro as { logoUrl?: string | null }).logoUrl).trim()) ||
       (profile?.avatarUrl && profile.avatarUrl.trim())
     );
     const hasLocation = Array.isArray(pro.locations) && pro.locations.length > 0;
@@ -231,7 +151,7 @@ export class ProfessionalsService {
       Array.isArray(pro.workingHours) &&
       pro.workingHours.some((h) => h.isActive !== false);
 
-    const fields: CompletionResult['fields'] = [
+    const fields = [
       { key: 'title', label: COMPLETION_LABELS.title, done: hasTitle },
       { key: 'firstName', label: COMPLETION_LABELS.firstName, done: hasFirst },
       { key: 'lastName', label: COMPLETION_LABELS.lastName, done: hasLast },
@@ -282,5 +202,49 @@ export class ProfessionalsService {
     });
     if (!pro) throw new NotFoundException('\u067e\u0631\u0648\u0641\u0627\u06cc\u0644 \u0632\u06cc\u0628\u0627\u06af\u0631 \u06cc\u0627\u0641\u062a \u0646\u0634\u062f');
     return pro;
+  }
+
+  async findPublicBySlug(slug: string) {
+    const pro = await this.prisma.professional.findFirst({
+      where: { slug, status: ProfessionalStatus.approved, publishedAt: { not: null } },
+      include: this.publicInclude(),
+    });
+    if (!pro) throw new NotFoundException();
+    return pro;
+  }
+
+  async searchPublic(params: { q?: string; city?: string; page?: number; limit?: number }) {
+    const page = params.page || 1;
+    const limit = Math.min(params.limit || 20, 50);
+    const where: Prisma.ProfessionalWhereInput = {
+      status: ProfessionalStatus.approved,
+      publishedAt: { not: null },
+      ...(params.q
+        ? {
+            OR: [
+              { title: { contains: params.q, mode: 'insensitive' } },
+              { bio: { contains: params.q, mode: 'insensitive' } },
+              { slug: { contains: params.q, mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+      ...(params.city
+        ? { locations: { some: { location: { city: { contains: params.city, mode: 'insensitive' } } } } }
+        : {}),
+    };
+    const [items, total] = await Promise.all([
+      this.prisma.professional.findMany({
+        where,
+        include: {
+          user: { select: { profile: { select: { displayName: true, avatarUrl: true } } } },
+          locations: { include: { location: true }, take: 1 },
+        },
+        orderBy: [{ isFeatured: 'desc' }, { ratingAvg: 'desc' }, { publishedAt: 'desc' }],
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.professional.count({ where }),
+    ]);
+    return { items, total, page, limit };
   }
 }
