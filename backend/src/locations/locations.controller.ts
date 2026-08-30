@@ -1,6 +1,6 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { IsBoolean, IsNumber, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsBoolean, IsIn, IsNumber, IsOptional, IsString, MinLength } from 'class-validator';
 import { Type } from 'class-transformer';
 import { LocationsService } from './locations.service';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -14,6 +14,8 @@ class AddLocationDto {
   @IsOptional() @Type(() => Number) @IsNumber() latitude?: number;
   @IsOptional() @Type(() => Number) @IsNumber() longitude?: number;
   @IsOptional() @IsBoolean() isPrimary?: boolean;
+  /** exact = pin on map, approximate = city/area only (no public pin) */
+  @IsOptional() @IsIn(['exact', 'approximate']) precision?: 'exact' | 'approximate';
 }
 
 class WorkingHourDto {
@@ -43,7 +45,16 @@ export class LocationsController {
 
   @Post('locations')
   addLocation(@CurrentUser('id') userId: string, @Body() dto: AddLocationDto) {
-    return this.service.addLocation(userId, dto);
+    return this.service.addOrUpdatePrimary(userId, dto);
+  }
+
+  @Patch('locations/:id')
+  updateLocation(
+    @CurrentUser('id') userId: string,
+    @Param('id') id: string,
+    @Body() dto: AddLocationDto,
+  ) {
+    return this.service.updateLocation(userId, id, dto);
   }
 
   @Get('working-hours')
