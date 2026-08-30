@@ -39,7 +39,7 @@ export default () => {
     storageLocalPath: process.env.STORAGE_LOCAL_PATH || './uploads',
     // S3-compatible (Liara Object Storage, AWS, MinIO) — values from env only
     s3Endpoint: process.env.S3_ENDPOINT || '',
-    s3Region: process.env.S3_REGION || 'us-east-1',
+    s3Region: process.env.S3_REGION || 'default',
     s3AccessKey: process.env.S3_ACCESS_KEY || '',
     s3SecretKey: process.env.S3_SECRET_KEY || '',
     s3Bucket: process.env.S3_BUCKET || '',

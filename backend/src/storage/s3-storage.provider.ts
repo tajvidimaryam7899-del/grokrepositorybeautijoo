@@ -15,24 +15,22 @@ import {
 import { StorageProvider } from './storage.provider';
 
 /**
- * S3-compatible object storage (Liara Object Storage, AWS S3, MinIO, …).
+ * S3-compatible object storage for Liara Object Storage (and AWS/MinIO).
  *
- * Liara docs require forcePathStyle: true for the AWS SDK.
- * Endpoint examples: https://storage.iran.liara.site  |  https://storage.iran.liara.space
+ * Official Liara Node/Next samples:
+ *   - endpoint from console (e.g. https://storage.iran.liara.site)
+ *   - forcePathStyle: true
+ *   - region: often "default" or "us-east-1"
+ *
+ * AWS SDK JS v3 ≥ 3.729 sends flexible checksums by default; many S3-compatible
+ * providers (including Liara) reject those requests. We set
+ * requestChecksumCalculation / responseChecksumValidation to WHEN_REQUIRED.
  *
  * Required env (Liara secrets only — never commit):
  *   S3_ENDPOINT, S3_ACCESS_KEY, S3_SECRET_KEY, S3_BUCKET, S3_PUBLIC_URL
  *
- * Optional:
- *   S3_REGION              default "us-east-1" (Liara also accepts "default")
- *   S3_FORCE_PATH_STYLE    default "true" (set "false" only for pure AWS virtual-host style)
- *
- * Public URL policy for Beautijoo profile media (avatar/cover/logo):
- *   Use a **public-read bucket** (or public objects) and set S3_PUBLIC_URL to the
- *   stable public base from Liara console (do not invent the host).
- *   Rationale: professional pages need long-lived <img src> URLs without
- *   per-request presign. Secrets never leave the server; only object keys are public.
- *   For private documents later, add a presigned-URL path — not needed for gallery images.
+ * S3_PUBLIC_URL must be a real public base (custom domain bound to the bucket),
+ * e.g. https://media.beautijoo.com — never invent *.storage.iran.liara.site.
  */
 @Injectable()
 export class S3StorageProvider implements StorageProvider, OnModuleInit {
@@ -41,17 +39,16 @@ export class S3StorageProvider implements StorageProvider, OnModuleInit {
   private readonly bucket: string;
   private readonly publicBase: string;
   private readonly forcePathStyle: boolean;
+  private readonly endpointHost: string;
 
   constructor(private readonly config: ConfigService) {
-    const endpoint = (
-      process.env.S3_ENDPOINT ||
-      config.get<string>('s3Endpoint') ||
-      ''
-    ).trim();
+    const endpoint = this.cleanEndpoint(
+      process.env.S3_ENDPOINT || config.get<string>('s3Endpoint') || '',
+    );
     const region = (
       process.env.S3_REGION ||
       config.get<string>('s3Region') ||
-      'us-east-1'
+      'default'
     ).trim();
     const accessKeyId = (
       process.env.S3_ACCESS_KEY ||
@@ -69,8 +66,6 @@ export class S3StorageProvider implements StorageProvider, OnModuleInit {
       ''
     ).trim();
 
-    // Liara Object Storage: forcePathStyle MUST be true (official SDK samples).
-    // Only disable when explicitly S3_FORCE_PATH_STYLE=false (e.g. some AWS setups).
     const fpsRaw = (
       process.env.S3_FORCE_PATH_STYLE ||
       config.get<string>('s3ForcePathStyle') ||
@@ -80,12 +75,15 @@ export class S3StorageProvider implements StorageProvider, OnModuleInit {
       .toLowerCase();
     this.forcePathStyle = fpsRaw !== 'false' && fpsRaw !== '0';
 
+    this.endpointHost = this.safeHost(endpoint);
+
     if (!endpoint || !accessKeyId || !secretAccessKey || !this.bucket) {
       this.logger.error(
-        'S3 storage selected but S3_ENDPOINT / S3_ACCESS_KEY / S3_SECRET_KEY / S3_BUCKET are incomplete.',
+        'S3 config incomplete: need S3_ENDPOINT, S3_ACCESS_KEY, S3_SECRET_KEY, S3_BUCKET (secrets not logged).',
       );
     }
 
+    // WHEN_REQUIRED: critical for Liara / MinIO / R2 compatibility with SDK ≥ 3.729
     this.client = new S3Client({
       region,
       endpoint: endpoint || undefined,
@@ -94,10 +92,11 @@ export class S3StorageProvider implements StorageProvider, OnModuleInit {
         accessKeyId && secretAccessKey
           ? { accessKeyId, secretAccessKey }
           : undefined,
+      requestChecksumCalculation: 'WHEN_REQUIRED',
+      responseChecksumValidation: 'WHEN_REQUIRED',
     });
 
-    // Public base MUST come from env — never invent host from endpoint+bucket.
-    const explicit = (
+    this.publicBase = (
       process.env.S3_PUBLIC_URL ||
       process.env.STORAGE_PUBLIC_URL ||
       config.get<string>('s3PublicUrl') ||
@@ -105,19 +104,56 @@ export class S3StorageProvider implements StorageProvider, OnModuleInit {
     )
       .trim()
       .replace(/\/$/, '');
-    this.publicBase = explicit;
 
     if (!this.publicBase) {
       this.logger.error(
-        'S3_PUBLIC_URL is required when using object storage. ' +
-          'Set it to the public base URL shown in the Liara Object Storage console for this bucket.',
+        'S3_PUBLIC_URL is required. Use a custom domain bound to the bucket (e.g. https://media.beautijoo.com). ' +
+          'Do not use invent *.storage.iran.liara.site URLs — Liara panel subdomains are not for public delivery.',
+      );
+    } else if (/\.storage\.iran\.liara\.(site|space)$/i.test(this.publicBase.replace(/^https?:\/\//, '').split('/')[0] || '')) {
+      this.logger.warn(
+        'S3_PUBLIC_URL looks like a Liara default storage host. Liara states those hosts are for panel preview only; ' +
+          'bind a real domain (e.g. media.beautijoo.com) to the bucket for production public URLs.',
       );
     }
 
     this.logger.log(
-      `S3 client config bucket=${this.bucket || '(empty)'} forcePathStyle=${this.forcePathStyle} ` +
-        `publicBase=${this.publicBase || '(MISSING)'} endpoint=${endpoint ? '[set]' : '(empty)'}`,
+      `S3 ready bucket=${this.bucket || '(empty)'} endpointHost=${this.endpointHost || '(empty)'} ` +
+        `forcePathStyle=${this.forcePathStyle} region=${region} ` +
+        `publicBase=${this.publicBase || '(MISSING)'} checksums=WHEN_REQUIRED ` +
+        `hasAccessKey=${Boolean(accessKeyId)} hasSecret=${Boolean(secretAccessKey)}`,
     );
+  }
+
+  private cleanEndpoint(raw: string): string {
+    return raw.trim().replace(/\/+$/, '');
+  }
+
+  private safeHost(endpoint: string): string {
+    try {
+      return endpoint ? new URL(endpoint).host : '';
+    } catch {
+      return '(invalid-endpoint)';
+    }
+  }
+
+  /** Extract safe diagnostic fields from AWS SDK errors (never log secrets). */
+  private describeError(err: unknown): string {
+    if (!err || typeof err !== 'object') return String(err);
+    const e = err as Record<string, unknown> & {
+      name?: string;
+      message?: string;
+      Code?: string;
+      code?: string;
+      $metadata?: { httpStatusCode?: number; requestId?: string };
+    };
+    const parts = [
+      `name=${e.name || e.Code || e.code || 'Error'}`,
+      e.$metadata?.httpStatusCode != null ? `status=${e.$metadata.httpStatusCode}` : null,
+      e.$metadata?.requestId ? `requestId=${e.$metadata.requestId}` : null,
+      e.message ? `msg=${String(e.message).slice(0, 300)}` : null,
+    ].filter(Boolean);
+    return parts.join(' ');
   }
 
   async onModuleInit() {
@@ -125,17 +161,12 @@ export class S3StorageProvider implements StorageProvider, OnModuleInit {
       this.logger.error('S3_BUCKET is empty — uploads will fail.');
       return;
     }
-    if (!this.publicBase) {
-      this.logger.error(
-        'S3_PUBLIC_URL is empty — getPublicUrl will fail until it is set in environment.',
-      );
-    }
     try {
       await this.client.send(new HeadBucketCommand({ Bucket: this.bucket }));
       this.logger.log(`S3 HeadBucket OK bucket=${this.bucket}`);
     } catch (err) {
       this.logger.warn(
-        `S3 HeadBucket check failed (uploads may still work): ${(err as Error).message}`,
+        `S3 HeadBucket failed (PutObject may still work): ${this.describeError(err)}`,
       );
     }
   }
@@ -147,27 +178,32 @@ export class S3StorageProvider implements StorageProvider, OnModuleInit {
         'پیکربندی ذخیره‌سازی شیء ناقص است (S3_BUCKET).',
       );
     }
-    if (!this.publicBase) {
-      throw new InternalServerErrorException(
-        'S3_PUBLIC_URL تنظیم نشده است. آدرس عمومی باکت را از پنل لیارا در متغیر محیطی قرار دهید.',
-      );
+    if (!buffer?.length) {
+      throw new InternalServerErrorException('محتوای فایل خالی است.');
     }
+
+    const mime = contentType || 'application/octet-stream';
+
     try {
       await this.client.send(
         new PutObjectCommand({
           Bucket: this.bucket,
           Key: safeKey,
           Body: buffer,
-          ContentType: contentType || 'application/octet-stream',
+          ContentType: mime,
+          ContentLength: buffer.length,
           CacheControl: 'public, max-age=86400',
         }),
       );
       this.logger.log(
-        `s3 put key=${safeKey} bytes=${buffer.length} type=${contentType}`,
+        `s3 put OK key=${safeKey} bytes=${buffer.length} type=${mime} bucket=${this.bucket}`,
       );
       return safeKey;
     } catch (err) {
-      this.logger.error(`s3 put failed key=${safeKey}: ${(err as Error).message}`);
+      this.logger.error(
+        `s3 put FAILED key=${safeKey} bucket=${this.bucket} endpointHost=${this.endpointHost} ` +
+          `forcePathStyle=${this.forcePathStyle} ${this.describeError(err)}`,
+      );
       throw new InternalServerErrorException(
         'ذخیره‌سازی فایل در Object Storage ناموفق بود. تنظیمات S3 را بررسی کنید.',
       );
@@ -181,26 +217,22 @@ export class S3StorageProvider implements StorageProvider, OnModuleInit {
       await this.client.send(
         new DeleteObjectCommand({ Bucket: this.bucket, Key: safeKey }),
       );
+      this.logger.log(`s3 delete OK key=${safeKey}`);
     } catch (err) {
-      this.logger.warn(`s3 delete key=${safeKey}: ${(err as Error).message}`);
+      this.logger.warn(`s3 delete key=${safeKey}: ${this.describeError(err)}`);
     }
   }
 
-  /**
-   * Stable public URL for the object. Requires S3_PUBLIC_URL.
-   * Exact host must come from Liara console — do not guess.
-   */
   getPublicUrl(key: string): string {
     const safeKey = key.replace(/^\/+/, '');
     if (!this.publicBase) {
       throw new InternalServerErrorException(
-        'S3_PUBLIC_URL تنظیم نشده است؛ امکان ساخت URL عمومی وجود ندارد.',
+        'S3_PUBLIC_URL تنظیم نشده است. دامنه عمومی متصل به باکت (مثلاً https://media.beautijoo.com) را تنظیم کنید.',
       );
     }
     return `${this.publicBase}/${safeKey}`;
   }
 
-  /** Optional helper for ops/tests — HeadObject */
   async exists(key: string): Promise<boolean> {
     const safeKey = key.replace(/^\/+/, '');
     try {
