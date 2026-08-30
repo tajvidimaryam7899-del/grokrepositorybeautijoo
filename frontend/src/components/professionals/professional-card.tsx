@@ -21,12 +21,12 @@ export function ProfessionalCard({ pro, className }: Props) {
     <Link
       href={`/professionals/${pro.slug}`}
       className={cn(
-        'group flex flex-col overflow-hidden rounded-3xl border border-border bg-white shadow-sm transition hover:border-coral-light hover:shadow-md',
+        'group flex flex-col overflow-hidden rounded-2xl border border-border/90 bg-white shadow-[0_1px_3px_rgba(31,41,55,0.04)] transition-colors hover:border-blue/25 hover:shadow-[0_2px_8px_rgba(11,110,153,0.08)] sm:rounded-3xl',
         className,
       )}
     >
-      <div className="flex items-start gap-4 p-5">
-        <div className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-coral-soft text-lg font-bold text-coral">
+      <div className="flex items-start gap-3 p-4 sm:gap-4 sm:p-5">
+        <div className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-coral-soft text-base font-bold text-coral sm:size-14 sm:text-lg">
           {avatar ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -40,36 +40,36 @@ export function ProfessionalCard({ pro, className }: Props) {
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
-            <h3 className="truncate font-bold text-foreground group-hover:text-coral">
+            <h3 className="truncate text-sm font-bold text-foreground transition-colors group-hover:text-blue sm:text-base">
               {name}
             </h3>
             {pro.isFeatured && (
-              <span className="shrink-0 rounded-full bg-blue-light px-2 py-0.5 text-xs font-medium text-blue">
+              <span className="shrink-0 rounded-full bg-blue-light px-2 py-0.5 text-[11px] font-medium text-blue sm:text-xs">
                 ویژه
               </span>
             )}
           </div>
           {pro.title && pro.title !== name && (
-            <p className="mt-0.5 truncate text-sm text-gray">{pro.title}</p>
+            <p className="mt-0.5 truncate text-xs text-gray sm:text-sm">{pro.title}</p>
           )}
-          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray">
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-muted sm:mt-2">
             {rating && count > 0 && (
-              <span>
+              <span className="text-gray">
                 ★ {rating}{' '}
-                <span className="text-gray/70">({count} نظر)</span>
+                <span className="text-gray-muted">({count} نظر)</span>
               </span>
             )}
             {city && <span>{city}</span>}
           </div>
           {services.length > 0 && (
-            <p className="mt-2 line-clamp-1 text-xs text-gray">
+            <p className="mt-1.5 line-clamp-1 text-xs text-gray-muted sm:mt-2">
               {services.slice(0, 3).join(' · ')}
             </p>
           )}
         </div>
       </div>
-      <div className="mt-auto border-t border-border px-5 py-3">
-        <span className="text-sm font-medium text-coral group-hover:underline">
+      <div className="mt-auto border-t border-border/80 bg-gray-light/40 px-4 py-2.5 sm:px-5 sm:py-3">
+        <span className="text-sm font-medium text-coral transition-colors group-hover:text-coral-dark">
           مشاهده پروفایل و رزرو
         </span>
       </div>
