@@ -11,7 +11,7 @@ import { ProfileStepper, type WizardStep } from '@/components/profile/stepper';
 import {
   fetchMyProfessional, updateMyProfessional, addMyLocation, setMyWorkingHours,
   fetchPublicServices, upsertMyService, publishMyProfessional,
-  uploadMyMedia, fetchCategories,
+  uploadMyMedia, fetchCategories, resolveMediaUrl,
   type OwnProfessional, type ProfileCompletion,
 } from '@/lib/panel-api';
 import { friendlyApiError } from '@/lib/api-errors';
@@ -65,6 +65,7 @@ export default function ProfileCompletePage() {
   const [locProvince, setLocProvince] = useState('');
   const [locLat, setLocLat] = useState<number | null>(null);
   const [locLng, setLocLng] = useState<number | null>(null);
+  const [locPrecision, setLocPrecision] = useState<'exact' | 'approximate'>('approximate');
   const [cityOptions, setCityOptions] = useState<IranCity[]>([]);
   const [catalog, setCatalog] = useState<CatalogService[]>([]);
   const [selectedServiceId, setSelectedServiceId] = useState('');
@@ -83,9 +84,9 @@ export default function ProfileCompletePage() {
       setFirstName(data.user?.profile?.firstName || '');
       setLastName(data.user?.profile?.lastName || '');
       setBio(data.bio || data.user?.profile?.bio || '');
-      setAvatarUrl(data.user?.profile?.avatarUrl || '');
-      setCoverImageUrl(data.coverImageUrl || '');
-      setLogoUrl((data as { logoUrl?: string }).logoUrl || '');
+      setAvatarUrl(resolveMediaUrl(data.user?.profile?.avatarUrl || ''));
+      setCoverImageUrl(resolveMediaUrl(data.coverImageUrl || ''));
+      setLogoUrl(resolveMediaUrl((data as { logoUrl?: string }).logoUrl || ''));
       const primary = data.locations?.find((l) => l.isPrimary) || data.locations?.[0];
       if (primary) {
         setLocName(primary.location.name || '');
@@ -95,6 +96,8 @@ export default function ProfileCompletePage() {
         const lat = primary.location.latitude != null ? Number(primary.location.latitude) : null;
         const lng = primary.location.longitude != null ? Number(primary.location.longitude) : null;
         setLocLat(lat); setLocLng(lng);
+        const addr = primary.location.address || '';
+        setLocPrecision(addr.includes('محدوده') || addr.includes('تقریبی') ? 'approximate' : (lat != null ? 'exact' : 'approximate'));
         if (primary.location.province) setCityOptions(citiesOf(primary.location.province));
       }
       if (!resumeApplied.current) {
@@ -209,6 +212,7 @@ export default function ProfileCompletePage() {
         latitude: locLat ?? undefined,
         longitude: locLng ?? undefined,
         isPrimary: true,
+        precision: locPrecision,
       });
       await load();
       setMsg('موقعیت ذخیره شد');
@@ -330,7 +334,7 @@ export default function ProfileCompletePage() {
         <Card className="space-y-4">
           <h2 className="font-semibold">معرفی / بیو</h2>
           <label className="block space-y-1 text-sm">درباره شما (حداقل ۱۰ کاراکتر)
-            <textarea className="w-full rounded-xl border border-gray-border p-3 text-sm" rows={4}
+            <textarea className="w-full rounded-xl border border-border p-3 text-sm" rows={4}
               value={bio} onChange={(e) => setBio(e.target.value)} /></label>
         </Card>
       )}
@@ -343,7 +347,7 @@ export default function ProfileCompletePage() {
               { kind: 'cover' as const, label: 'کاور', url: coverImageUrl },
               { kind: 'logo' as const, label: 'لوگو', url: logoUrl },
             ] as const).map(({ kind, label, url }) => (
-              <div key={kind} className="flex flex-col gap-2 overflow-hidden rounded-2xl border border-gray-border bg-white shadow-sm">
+              <div key={kind} className="flex flex-col gap-2 overflow-hidden rounded-2xl border border-border bg-white shadow-sm">
                 <div className="relative h-28 bg-gray-light">
                   {url ? (
                     // eslint-disable-next-line @next/next/no-img-element
@@ -389,9 +393,10 @@ export default function ProfileCompletePage() {
       {step === 3 && (
         <Card className="space-y-4">
           <h2 className="font-semibold">موقعیت مکانی</h2>
-          <div className="grid grid-cols-2 gap-3">
+          <p className="text-xs text-gray">استان و شهر الزامی است. می‌توانید موقعیت دقیق روی نقشه ثبت کنید یا فقط محدوده شهر را مشخص کنید.</p>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <label className="block space-y-1 text-sm">استان *
-              <select className="w-full rounded-xl border border-gray-border p-3 text-sm" value={locProvince}
+              <select className="w-full rounded-xl border border-border p-3 text-sm" value={locProvince}
                 onChange={(e) => {
                   const name = e.target.value;
                   setLocProvince(name);
@@ -403,8 +408,8 @@ export default function ProfileCompletePage() {
                 {IRAN_PROVINCES.map((pr) => <option key={pr.name} value={pr.name}>{pr.name}</option>)}
               </select>
             </label>
-            <label className="block space-y-1 text-sm">شهر *
-              <select className="w-full rounded-xl border border-gray-border p-3 text-sm" value={locCity}
+            <label className="block space-y-1 text-sm">شهر * ({cityOptions.length} شهر)
+              <select className="w-full rounded-xl border border-border p-3 text-sm" value={locCity}
                 disabled={!locProvince}
                 onChange={(e) => {
                   const name = e.target.value;
@@ -417,20 +422,60 @@ export default function ProfileCompletePage() {
               </select>
             </label>
           </div>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={() => setLocPrecision('approximate')}
+              className={`rounded-full px-3 py-1.5 text-sm border ${locPrecision === 'approximate' ? 'border-blue bg-blue text-white' : 'border-border bg-white text-gray'}`}>
+              فقط محدوده شهر
+            </button>
+            <button type="button" onClick={() => setLocPrecision('exact')}
+              className={`rounded-full px-3 py-1.5 text-sm border ${locPrecision === 'exact' ? 'border-coral bg-coral text-white' : 'border-border bg-white text-gray'}`}>
+              موقعیت دقیق (پین نقشه)
+            </button>
+          </div>
           <label className="block space-y-1 text-sm">آدرس (اختیاری)
             <Input value={locAddress} onChange={(e) => setLocAddress(e.target.value)} placeholder="خیابان، پلاک، ..." /></label>
           <label className="block space-y-1 text-sm">نام سالن / محل (اختیاری)
             <Input value={locName} onChange={(e) => setLocName(e.target.value)} placeholder="سالن زیبایی ..." /></label>
           {locLat != null && locLng != null && (
-            <div className="rounded-xl border border-gray-border bg-gray-light p-3 text-sm">
-              <div className="mb-1 font-medium text-gray">مختصات روی نقشه</div>
-              <div className="text-xs text-gray">عرض: {locLat.toFixed(5)} — طول: {locLng.toFixed(5)}</div>
-              <a
-                className="mt-2 inline-block text-xs text-blue hover:underline"
-                href={`https://www.openstreetmap.org/?mlat=${locLat}&mlon=${locLng}#map=14/${locLat}/${locLng}`}
-                target="_blank"
-                rel="noreferrer"
-              >مشاهده روی نقشه</a>
+            <div className="space-y-2 rounded-xl border border-border bg-gray-light/60 p-3">
+              <div className="text-sm font-medium text-foreground">
+                {locPrecision === 'exact' ? 'موقعیت روی نقشه' : 'مرکز محدوده شهر'}
+              </div>
+              <div className="overflow-hidden rounded-xl border border-border bg-white">
+                <iframe
+                  title="map"
+                  className="h-48 w-full sm:h-56"
+                  loading="lazy"
+                  referrerPolicy="no-referrer-when-downgrade"
+                  src={`https://www.openstreetmap.org/export/embed.html?bbox=${locLng - 0.04}%2C${locLat - 0.03}%2C${locLng + 0.04}%2C${locLat + 0.03}&layer=mapnik&marker=${locLat}%2C${locLng}`}
+                />
+              </div>
+              {locPrecision === 'exact' && (
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="block space-y-1 text-xs">عرض جغرافیایی
+                    <Input type="number" step="0.0001" value={String(locLat)}
+                      onChange={(e) => setLocLat(parseFloat(e.target.value) || null)} dir="ltr" className="text-left" /></label>
+                  <label className="block space-y-1 text-xs">طول جغرافیایی
+                    <Input type="number" step="0.0001" value={String(locLng)}
+                      onChange={(e) => setLocLng(parseFloat(e.target.value) || null)} dir="ltr" className="text-left" /></label>
+                </div>
+              )}
+              <div className="flex flex-wrap gap-2 text-xs">
+                <a className="rounded-lg bg-blue px-3 py-1.5 font-medium text-white"
+                  href={`https://neshan.org/maps/@${locLat},${locLng},15.0z`}
+                  target="_blank" rel="noreferrer">مسیریابی در نشان</a>
+                <a className="rounded-lg border border-border bg-white px-3 py-1.5 font-medium text-blue"
+                  href={`https://www.google.com/maps/search/?api=1&query=${locLat},${locLng}`}
+                  target="_blank" rel="noreferrer">گوگل‌مپ</a>
+                <a className="rounded-lg border border-border bg-white px-3 py-1.5 text-gray"
+                  href={`https://www.openstreetmap.org/?mlat=${locLat}&mlon=${locLng}#map=15/${locLat}/${locLng}`}
+                  target="_blank" rel="noreferrer">OpenStreetMap</a>
+              </div>
+              <p className="text-[11px] text-gray-muted">
+                {locPrecision === 'approximate'
+                  ? 'در حالت محدوده، مختصات دقیق ساختمان ذخیره نمی‌شود و مشتری فقط محدوده شهر را می‌بیند.'
+                  : 'مختصات دقیق ذخیره می‌شود و مشتری می‌تواند تا محل مسیریابی کند. بعداً از همین صفحه قابل ویرایش است.'}
+              </p>
             </div>
           )}
         </Card>
@@ -439,13 +484,13 @@ export default function ProfileCompletePage() {
         <Card className="space-y-4">
           <h2 className="font-semibold">تخصص‌ها و قیمت</h2>
           <label className="block space-y-1 text-sm">انتخاب خدمت از کاتالوگ
-            <select className="w-full rounded-xl border border-gray-border p-3 text-sm" value={selectedServiceId}
+            <select className="w-full rounded-xl border border-border p-3 text-sm" value={selectedServiceId}
               onChange={(e) => setSelectedServiceId(e.target.value)}>
               <option value="">انتخاب کنید</option>
               {catalog.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select></label>
           {!catalog.length && (
-            <p className="text-xs text-coral">لیست خدمات خالی است — ممکن است هنوز در دیتابیس seed نشده باشد.</p>
+            <p className="text-xs text-coral">لیست خدمات خالی است — پس از Redeploy بک‌اند، کاتالوگ به‌صورت خودکار seed می‌شود.</p>
           )}
           <div className="grid grid-cols-2 gap-3">
             <label className="block space-y-1 text-sm">مدت (دقیقه)
@@ -467,7 +512,7 @@ export default function ProfileCompletePage() {
                 className={`rounded-full px-3 py-1.5 text-sm border ${
                   hourDays.includes(d.value)
                     ? 'border-coral bg-coral text-white'
-                    : 'border-gray-border bg-white text-gray'
+                    : 'border-border bg-white text-gray'
                 }`}
               >{d.label}</button>
             ))}
