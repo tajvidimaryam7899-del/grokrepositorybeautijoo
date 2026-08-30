@@ -1,4 +1,10 @@
-import { Injectable, Inject, BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  Inject,
+  BadRequestException,
+  NotFoundException,
+  Logger,
+} from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { ProfessionalsService } from '../professionals/professionals.service';
@@ -8,8 +14,20 @@ import { MediaKind, MediaStatus } from '@prisma/client';
 const IMAGE_MIME = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
 const VIDEO_MIME = new Set(['video/mp4', 'video/webm', 'video/quicktime']);
 
+const MIME_EXT: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+  'image/gif': 'gif',
+  'video/mp4': 'mp4',
+  'video/webm': 'webm',
+  'video/quicktime': 'mov',
+};
+
 @Injectable()
 export class MediaService {
+  private readonly logger = new Logger(MediaService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly professionals: ProfessionalsService,
@@ -23,11 +41,21 @@ export class MediaService {
     professionalServiceId?: string,
   ) {
     if (!file?.buffer?.length) throw new BadRequestException('فایل الزامی است');
-    const isImage = IMAGE_MIME.has(file.mimetype);
-    const isVideo = VIDEO_MIME.has(file.mimetype);
-    if (!isImage && !isVideo) throw new BadRequestException('فقط تصویر یا ویدیو مجاز است');
-    if (isImage && file.size > 8 * 1024 * 1024) throw new BadRequestException('حداکثر حجم تصویر ۸ مگابایت');
-    if (isVideo && file.size > 50 * 1024 * 1024) throw new BadRequestException('حداکثر حجم ویدیو ۵۰ مگابایت');
+
+    const mime = (file.mimetype || '').toLowerCase();
+    const isImage = IMAGE_MIME.has(mime);
+    const isVideo = VIDEO_MIME.has(mime);
+    if (!isImage && !isVideo) {
+      throw new BadRequestException(
+        'فرمت این تصویر پشتیبانی نمی‌شود. فقط JPG، PNG، WEBP و GIF مجاز است.',
+      );
+    }
+    if (isImage && file.size > 8 * 1024 * 1024) {
+      throw new BadRequestException('حجم تصویر بیش از حد مجاز است (حداکثر ۸ مگابایت).');
+    }
+    if (isVideo && file.size > 50 * 1024 * 1024) {
+      throw new BadRequestException('حجم ویدیو بیش از حد مجاز است (حداکثر ۵۰ مگابایت).');
+    }
 
     const pro = await this.professionals.requireOwnProfessional(userId);
     if (professionalServiceId) {
@@ -36,10 +64,16 @@ export class MediaService {
       });
       if (!ps) throw new NotFoundException('خدمت یافت نشد');
     }
-    const ext = (file.originalname.split('.').pop() || 'bin').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+    const fromName = (file.originalname.split('.').pop() || '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, '');
+    const ext = MIME_EXT[mime] || fromName || 'bin';
     const key = `professionals/${pro.id}/${kind}/${randomUUID()}.${ext}`;
-    await this.storage.upload(key, file.buffer, file.mimetype);
+
+    await this.storage.upload(key, file.buffer, mime);
     const publicUrl = this.storage.getPublicUrl(key);
+
     const asset = await this.prisma.mediaAsset.create({
       data: {
         professionalId: pro.id,
@@ -47,17 +81,39 @@ export class MediaService {
         kind,
         storageKey: key,
         publicUrl,
-        mimeType: file.mimetype,
+        mimeType: mime,
         status: MediaStatus.draft,
       },
     });
-    if (kind === MediaKind.logo) {
-      await this.prisma.professional.update({ where: { id: pro.id }, data: { logoUrl: publicUrl } });
-    } else if (kind === MediaKind.cover) {
-      await this.prisma.professional.update({ where: { id: pro.id }, data: { coverImageUrl: publicUrl } });
-    } else if (kind === MediaKind.avatar) {
-      await this.prisma.profile.update({ where: { userId }, data: { avatarUrl: publicUrl } });
+
+    try {
+      if (kind === MediaKind.logo) {
+        await this.prisma.professional.update({
+          where: { id: pro.id },
+          data: { logoUrl: publicUrl },
+        });
+      } else if (kind === MediaKind.cover) {
+        await this.prisma.professional.update({
+          where: { id: pro.id },
+          data: { coverImageUrl: publicUrl },
+        });
+      } else if (kind === MediaKind.avatar) {
+        await this.prisma.profile.upsert({
+          where: { userId },
+          update: { avatarUrl: publicUrl },
+          create: {
+            userId,
+            displayName: pro.title || 'زیباگر',
+            avatarUrl: publicUrl,
+          },
+        });
+      }
+    } catch (err) {
+      this.logger.warn(
+        `media metadata link failed kind=${kind} asset=${asset.id}: ${(err as Error).message}`,
+      );
     }
+
     return asset;
   }
 
@@ -81,8 +137,10 @@ export class MediaService {
 
   async deleteMine(userId: string, id: string) {
     const pro = await this.professionals.requireOwnProfessional(userId);
-    const asset = await this.prisma.mediaAsset.findFirst({ where: { id, professionalId: pro.id } });
-    if (!asset) throw new NotFoundException();
+    const asset = await this.prisma.mediaAsset.findFirst({
+      where: { id, professionalId: pro.id },
+    });
+    if (!asset) throw new NotFoundException('تصویر یافت نشد');
     await this.storage.delete(asset.storageKey);
     await this.prisma.mediaAsset.delete({ where: { id } });
     return { ok: true };
