@@ -6,19 +6,19 @@ type Size = 'sm' | 'md' | 'lg';
 
 const variants: Record<Variant, string> = {
   primary:
-    'bg-coral text-white hover:bg-[#d45452] disabled:bg-coral-light',
+    'bg-coral text-white shadow-sm hover:bg-coral-dark disabled:bg-coral-light disabled:text-white/80',
   secondary:
-    'bg-blue text-white hover:bg-[#2d395f] disabled:bg-blue-light disabled:text-blue',
+    'bg-blue text-white shadow-sm hover:bg-blue-dark disabled:bg-blue-light disabled:text-blue',
   outline:
-    'border border-border bg-white text-foreground hover:bg-gray-light',
+    'border border-border bg-white text-foreground hover:border-blue/30 hover:bg-blue-soft',
   ghost: 'bg-transparent text-foreground hover:bg-gray-light',
   danger: 'bg-red-600 text-white hover:bg-red-700',
 };
 
 const sizes: Record<Size, string> = {
-  sm: 'h-9 px-3 text-sm rounded-xl',
-  md: 'h-11 px-4 text-sm rounded-2xl',
-  lg: 'h-12 px-6 text-base rounded-2xl',
+  sm: 'h-9 min-h-9 px-3 text-sm rounded-xl',
+  md: 'h-11 min-h-11 px-4 text-sm rounded-2xl',
+  lg: 'h-12 min-h-12 px-6 text-base rounded-2xl',
 };
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -44,7 +44,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       ref={ref}
       disabled={disabled || loading}
       className={cn(
-        'inline-flex items-center justify-center gap-2 font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-coral/40 disabled:cursor-not-allowed disabled:opacity-60',
+        'inline-flex items-center justify-center gap-2 font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue/30 disabled:cursor-not-allowed disabled:opacity-60',
         variants[variant],
         sizes[size],
         className,
