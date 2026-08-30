@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ProfessionalsService } from '../professionals/professionals.service';
 
@@ -12,19 +12,24 @@ export class LocationsService {
   async addLocation(
     userId: string,
     data: {
-      name: string; address: string; city: string; province?: string;
+      name?: string; address?: string; city: string; province?: string;
       latitude?: number; longitude?: number; isPrimary?: boolean;
     },
   ) {
+    if (!data.city?.trim()) {
+      throw new BadRequestException('شهر الزامی است');
+    }
     const pro = await this.professionals.requireOwnProfessional(userId);
+    const name = (data.name?.trim() || data.city.trim());
+    const address = (data.address?.trim() || `${data.province || ''} ${data.city}`.trim());
     const location = await this.prisma.location.create({
       data: {
-        name: data.name,
-        address: data.address,
-        city: data.city,
-        province: data.province,
-        latitude: data.latitude != null ? data.latitude : undefined,
-        longitude: data.longitude != null ? data.longitude : undefined,
+        name,
+        address,
+        city: data.city.trim(),
+        province: data.province || null,
+        latitude: data.latitude != null ? data.latitude : null,
+        longitude: data.longitude != null ? data.longitude : null,
       },
     });
     if (data.isPrimary) {
@@ -37,7 +42,7 @@ export class LocationsService {
       data: {
         professionalId: pro.id,
         locationId: location.id,
-        isPrimary: data.isPrimary ?? false,
+        isPrimary: data.isPrimary ?? true,
       },
     });
     return location;

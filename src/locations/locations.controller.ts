@@ -1,17 +1,18 @@
 import { Body, Controller, Get, Post } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { IsBoolean, IsNumber, IsOptional, IsString, MinLength } from 'class-validator';
+import { Type } from 'class-transformer';
 import { LocationsService } from './locations.service';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 
 class AddLocationDto {
-  @IsString() @MinLength(2) name!: string;
-  @IsString() @MinLength(5) address!: string;
+  @IsOptional() @IsString() name?: string;
+  @IsOptional() @IsString() address?: string;
   @IsString() @MinLength(2) city!: string;
   @IsOptional() @IsString() province?: string;
-  @IsOptional() @IsNumber() latitude?: number;
-  @IsOptional() @IsNumber() longitude?: number;
+  @IsOptional() @Type(() => Number) @IsNumber() latitude?: number;
+  @IsOptional() @Type(() => Number) @IsNumber() longitude?: number;
   @IsOptional() @IsBoolean() isPrimary?: boolean;
 }
 
