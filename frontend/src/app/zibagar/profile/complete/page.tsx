@@ -1,5 +1,5 @@
 'use client';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/auth-context';
 import { Card } from '@/components/ui/card';
@@ -11,9 +11,11 @@ import { ProfileStepper, type WizardStep } from '@/components/profile/stepper';
 import {
   fetchMyProfessional, updateMyProfessional, addMyLocation, setMyWorkingHours,
   fetchPublicServices, upsertMyService, publishMyProfessional,
+  uploadMyMedia, fetchCategories, upsertMyPriceRule,
   type OwnProfessional, type ProfileCompletion,
 } from '@/lib/panel-api';
 import { friendlyApiError } from '@/lib/api-errors';
+import { IRAN_PROVINCES, citiesOf, type IranCity } from '@/lib/geo/iran-provinces';
 
 const STEPS: WizardStep[] = [
   { id: 'basic', label: 'اطلاعات پایه' },
@@ -35,6 +37,7 @@ export default function ProfileCompletePage() {
   const [pro, setPro] = useState<OwnProfessional | null>(null);
   const [completion, setCompletion] = useState<ProfileCompletion | null>(null);
   const [step, setStep] = useState(0);
+  const resumeApplied = useRef(false);
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [confirmPublish, setConfirmPublish] = useState(false);
@@ -44,9 +47,15 @@ export default function ProfileCompletePage() {
   const [bio, setBio] = useState('');
   const [avatarUrl, setAvatarUrl] = useState('');
   const [coverImageUrl, setCoverImageUrl] = useState('');
+  const [logoUrl, setLogoUrl] = useState('');
+  const [uploading, setUploading] = useState<string | null>(null);
   const [locName, setLocName] = useState('');
   const [locAddress, setLocAddress] = useState('');
   const [locCity, setLocCity] = useState('');
+  const [locProvince, setLocProvince] = useState('');
+  const [locLat, setLocLat] = useState<number | null>(null);
+  const [locLng, setLocLng] = useState<number | null>(null);
+  const [cityOptions, setCityOptions] = useState<IranCity[]>([]);
   const [catalog, setCatalog] = useState<CatalogService[]>([]);
   const [selectedServiceId, setSelectedServiceId] = useState('');
   const [svcDuration, setSvcDuration] = useState('60');
@@ -66,29 +75,38 @@ export default function ProfileCompletePage() {
       setBio(data.bio || data.user?.profile?.bio || '');
       setAvatarUrl(data.user?.profile?.avatarUrl || '');
       setCoverImageUrl(data.coverImageUrl || '');
+      setLogoUrl((data as { logoUrl?: string }).logoUrl || '');
       const primary = data.locations?.find((l) => l.isPrimary) || data.locations?.[0];
       if (primary) {
         setLocName(primary.location.name || '');
         setLocAddress(primary.location.address || '');
         setLocCity(primary.location.city || '');
+        setLocProvince(primary.location.province || '');
+        const lat = primary.location.latitude != null ? Number(primary.location.latitude) : null;
+        const lng = primary.location.longitude != null ? Number(primary.location.longitude) : null;
+        setLocLat(lat); setLocLng(lng);
+        if (primary.location.province) setCityOptions(citiesOf(primary.location.province));
       }
-      const fields = data.completion?.fields || [];
-      const order = ['title','firstName','lastName','bio','avatarOrCover','location','service','workingHours'];
-      let resume = 0;
-      for (let i = 0; i < order.length; i++) {
-        const f = fields.find((x) => x.key === order[i]);
-        if (f && !f.done) {
-          if (i <= 2) resume = 0;
-          else if (i === 3) resume = 1;
-          else if (i === 4) resume = 2;
-          else if (i === 5) resume = 3;
-          else if (i === 6) resume = 4;
-          else resume = 5;
-          break;
+      if (!resumeApplied.current) {
+        resumeApplied.current = true;
+        const fields = data.completion?.fields || [];
+        const order = ['title','firstName','lastName','bio','avatarOrCover','location','service','workingHours'];
+        let resume = 0;
+        for (let i = 0; i < order.length; i++) {
+          const f = fields.find((x) => x.key === order[i]);
+          if (f && !f.done) {
+            if (i <= 2) resume = 0;
+            else if (i === 3) resume = 1;
+            else if (i === 4) resume = 2;
+            else if (i === 5) resume = 3;
+            else if (i === 6) resume = 4;
+            else resume = 5;
+            break;
+          }
+          if (i === order.length - 1 && data.completion?.complete) resume = 6;
         }
-        if (i === order.length - 1 && data.completion?.complete) resume = 6;
+        setStep(resume);
       }
-      setStep(resume);
     } catch (e) {
       setError(friendlyApiError(e));
     } finally {
@@ -99,7 +117,21 @@ export default function ProfileCompletePage() {
   useEffect(() => { if (!authLoading && user) load(); }, [authLoading, user, load]);
   useEffect(() => {
     if (step === 4) {
-      fetchPublicServices().then((list) => setCatalog(list.map((s: CatalogService) => ({ id: s.id, name: s.name })))).catch(() => {});
+      fetchCategories()
+        .then((cats) => {
+          const out: CatalogService[] = [];
+          for (const c of cats || []) {
+            for (const s of c.services || []) out.push({ id: s.id, name: `${c.name} — ${s.name}` });
+            for (const ch of c.children || []) {
+              for (const s of ch.services || []) out.push({ id: s.id, name: `${c.name} / ${ch.name} — ${s.name}` });
+            }
+          }
+          if (out.length) setCatalog(out);
+          else return fetchPublicServices().then((list) => setCatalog((list || []).map((s: CatalogService) => ({ id: s.id, name: s.name }))));
+        })
+        .catch(() => {
+          fetchPublicServices().then((list) => setCatalog((list || []).map((s: CatalogService) => ({ id: s.id, name: s.name })))).catch(() => {});
+        });
     }
   }, [step]);
 
@@ -141,12 +173,8 @@ export default function ProfileCompletePage() {
   async function saveMedia() {
     setSaving(true); setError(null); setMsg(null);
     try {
-      const data = await updateMyProfessional({
-        avatarUrl: avatarUrl.trim() || undefined,
-        coverImageUrl: coverImageUrl.trim() || undefined,
-      });
-      setPro(data); setCompletion(data.completion || null);
-      setMsg('ذخیره شد');
+      await load();
+      setMsg('تصاویر ثبت شد');
       return true;
     } catch (e) {
       setError(friendlyApiError(e));
@@ -167,6 +195,9 @@ export default function ProfileCompletePage() {
         name: locName.trim(),
         address: locAddress.trim(),
         city: locCity.trim(),
+        province: locProvince || undefined,
+        latitude: locLat ?? undefined,
+        longitude: locLng ?? undefined,
         isPrimary: true,
       });
       await load();
@@ -189,15 +220,11 @@ export default function ProfileCompletePage() {
       }
       const duration = parseInt(svcDuration, 10);
       const price = parseInt(svcPrice, 10);
-      if (!duration || duration < 5 || !price || price < 0) {
+      if (!duration || duration < 5 || price == null || price < 0) {
         setError('مدت و قیمت معتبر وارد کنید');
         return false;
       }
-      await upsertMyService({
-        serviceId: selectedServiceId,
-        durationMin: duration,
-        price,
-      });
+      await upsertMyService({ serviceId: selectedServiceId, durationMin: duration, price });
       await load();
       setMsg('تخصص ذخیره شد');
       return true;
@@ -212,9 +239,7 @@ export default function ProfileCompletePage() {
   async function saveHours() {
     setSaving(true); setError(null); setMsg(null);
     try {
-      await setMyWorkingHours({
-        dayOfWeek: hourDay, startTime: hourStart, endTime: hourEnd,
-      });
+      await setMyWorkingHours({ dayOfWeek: hourDay, startTime: hourStart, endTime: hourEnd });
       await load();
       setMsg('ساعات کاری ذخیره شد');
       return true;
@@ -260,9 +285,9 @@ export default function ProfileCompletePage() {
   const isPublished = pro?.status === 'approved';
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" dir="rtl">
       <div>
-        <h1 className="text-2xl font-bold">تکمیل پروفایل</h1>
+        <h1 className="text-2xl font-bold text-coral">تکمیل پروفایل</h1>
         <p className="mt-1 text-sm text-gray">اطلاعات هر مرحله بلافاصله در سرور ذخیره می‌شود</p>
       </div>
       <CompletionBar percent={percent} />
@@ -292,10 +317,47 @@ export default function ProfileCompletePage() {
       {step === 2 && (
         <Card className="space-y-4">
           <h2 className="font-semibold">تصاویر</h2>
-          <label className="block space-y-1 text-sm">آدرس تصویر پروفایل (URL)
-            <Input value={avatarUrl} onChange={(e) => setAvatarUrl(e.target.value)} placeholder="https://..." /></label>
-          <label className="block space-y-1 text-sm">آدرس تصویر کاور (URL)
-            <Input value={coverImageUrl} onChange={(e) => setCoverImageUrl(e.target.value)} placeholder="https://..." /></label>
+          <p className="text-sm text-gray">آپلود مستقیم فایل — بدون لینک URL.</p>
+          <div className="grid gap-4 sm:grid-cols-3">
+            {([
+              { kind: 'avatar' as const, label: 'آواتار', url: avatarUrl },
+              { kind: 'cover' as const, label: 'کاور', url: coverImageUrl },
+              { kind: 'logo' as const, label: 'لوگو', url: logoUrl },
+            ] as const).map(({ kind, label, url }) => (
+              <div key={kind} className="space-y-2 rounded-xl border border-gray-border p-3">
+                <div className="text-sm font-medium">{label}</div>
+                {url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={url} alt={label} className="h-24 w-full rounded-lg object-cover" />
+                ) : (
+                  <div className="flex h-24 items-center justify-center rounded-lg bg-gray-light text-xs text-gray">بدون تصویر</div>
+                )}
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  className="block w-full text-xs"
+                  disabled={!!uploading}
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    setUploading(kind); setError(null); setMsg(null);
+                    try {
+                      const asset = await uploadMyMedia(file, kind);
+                      if (kind === 'avatar') setAvatarUrl(asset.publicUrl);
+                      if (kind === 'cover') setCoverImageUrl(asset.publicUrl);
+                      if (kind === 'logo') setLogoUrl(asset.publicUrl);
+                      setMsg('تصویر آپلود شد');
+                    } catch (err) {
+                      setError(friendlyApiError(err));
+                    } finally {
+                      setUploading(null);
+                    }
+                  }}
+                />
+                {uploading === kind && <span className="text-xs text-blue">در حال آپلود...</span>}
+              </div>
+            ))}
+          </div>
         </Card>
       )}
       {step === 3 && (
@@ -305,8 +367,37 @@ export default function ProfileCompletePage() {
             <Input value={locName} onChange={(e) => setLocName(e.target.value)} placeholder="سالن زیبایی ..." /></label>
           <label className="block space-y-1 text-sm">آدرس
             <Input value={locAddress} onChange={(e) => setLocAddress(e.target.value)} /></label>
-          <label className="block space-y-1 text-sm">شهر
-            <Input value={locCity} onChange={(e) => setLocCity(e.target.value)} placeholder="تهران" /></label>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block space-y-1 text-sm">استان
+              <select className="w-full rounded-xl border border-gray-border p-3 text-sm" value={locProvince}
+                onChange={(e) => {
+                  const name = e.target.value;
+                  setLocProvince(name);
+                  setCityOptions(citiesOf(name));
+                  setLocCity('');
+                  setLocLat(null); setLocLng(null);
+                }}>
+                <option value="">انتخاب استان</option>
+                {IRAN_PROVINCES.map((pr) => <option key={pr.name} value={pr.name}>{pr.name}</option>)}
+              </select>
+            </label>
+            <label className="block space-y-1 text-sm">شهر
+              <select className="w-full rounded-xl border border-gray-border p-3 text-sm" value={locCity}
+                disabled={!locProvince}
+                onChange={(e) => {
+                  const name = e.target.value;
+                  setLocCity(name);
+                  const c = cityOptions.find((x) => x.name === name);
+                  if (c) { setLocLat(c.lat); setLocLng(c.lng); }
+                }}>
+                <option value="">انتخاب شهر</option>
+                {cityOptions.map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}
+              </select>
+            </label>
+          </div>
+          {locLat != null && locLng != null && (
+            <p className="text-xs text-gray">مختصات: {locLat.toFixed(4)}, {locLng.toFixed(4)}</p>
+          )}
         </Card>
       )}
       {step === 4 && (
