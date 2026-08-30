@@ -32,32 +32,36 @@ export default async function HomePage() {
 
   return (
     <div>
-      <section className="bg-gradient-to-b from-coral-soft to-white">
-        <div className="mx-auto max-w-6xl px-4 py-16 md:py-24">
+      <section className="relative overflow-hidden bg-gradient-to-b from-coral-soft via-white to-blue-soft/40">
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-blue-soft/50 to-transparent" />
+        <div className="relative mx-auto max-w-6xl px-4 py-12 sm:py-16 md:py-24">
           <div className="mx-auto max-w-2xl text-center">
-            <h1 className="text-3xl font-bold leading-tight text-foreground md:text-5xl">
+            <p className="mb-3 text-xs font-medium tracking-wide text-blue sm:text-sm">
+              رزرو آنلاین زیبایی
+            </p>
+            <h1 className="text-2xl font-bold leading-snug text-foreground sm:text-3xl sm:leading-tight md:text-5xl">
               زیباگر مناسب خود را پیدا کنید
             </h1>
-            <p className="mt-4 text-base text-gray md:text-lg">
+            <p className="mt-3 text-sm leading-7 text-gray sm:mt-4 sm:text-base md:text-lg">
               رزرو آنلاین خدمات زیبایی — آرایش، ناخن، پوست و بیشتر، نزدیک شما
             </p>
             <form
               action="/search"
               method="get"
-              className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center"
+              className="mt-6 flex flex-col gap-2.5 sm:mt-8 sm:flex-row sm:items-center sm:gap-3"
             >
               <div className="relative flex-1">
-                <Search className="pointer-events-none absolute right-3 top-1/2 size-5 -translate-y-1/2 text-gray" />
+                <Search className="pointer-events-none absolute right-3 top-1/2 size-5 -translate-y-1/2 text-gray-muted" />
                 <input
                   name="q"
                   type="search"
                   placeholder="جستجوی خدمت یا زیباگر..."
-                  className="h-12 w-full rounded-2xl border border-border bg-white pr-11 pl-4 text-sm outline-none focus:border-coral focus:ring-2 focus:ring-coral/20"
+                  className="h-12 w-full rounded-2xl border border-border bg-white pr-11 pl-4 text-sm shadow-sm outline-none transition-colors placeholder:text-gray-muted focus:border-blue focus:ring-2 focus:ring-blue/15"
                 />
               </div>
               <button
                 type="submit"
-                className="h-12 shrink-0 rounded-2xl bg-coral px-8 text-sm font-medium text-white hover:bg-[#e85a4c]"
+                className="h-12 shrink-0 rounded-2xl bg-coral px-8 text-sm font-medium text-white shadow-sm transition-colors hover:bg-coral-dark"
               >
                 جستجو
               </button>
@@ -67,23 +71,28 @@ export default async function HomePage() {
       </section>
 
       {categories.length > 0 && (
-        <section className="mx-auto max-w-6xl px-4 py-12">
-          <div className="mb-6 flex items-end justify-between gap-4">
-            <h2 className="text-xl font-bold">دسته‌بندی خدمات</h2>
-            <Link href="/services" className="text-sm font-medium text-coral hover:underline">
+        <section className="mx-auto max-w-6xl px-4 py-10 sm:py-12">
+          <div className="mb-5 flex items-end justify-between gap-4 sm:mb-6">
+            <h2 className="text-lg font-bold text-foreground sm:text-xl">دسته‌بندی خدمات</h2>
+            <Link
+              href="/services"
+              className="text-sm font-medium text-coral transition-colors hover:text-coral-dark"
+            >
               همه خدمات
             </Link>
           </div>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+          <div className="grid grid-cols-2 gap-2.5 sm:gap-3 sm:grid-cols-3 md:grid-cols-4">
             {categories.slice(0, 8).map((c) => (
               <Link
                 key={c.id}
                 href={`/categories/${c.slug}`}
-                className="rounded-2xl border border-border bg-white p-4 text-center shadow-sm transition hover:border-coral-light"
+                className="rounded-2xl border border-border/90 bg-white p-3.5 text-center shadow-[0_1px_2px_rgba(31,41,55,0.04)] transition-colors hover:border-blue/25 hover:bg-blue-soft/60 sm:p-4"
               >
-                <span className="font-medium text-foreground">{c.name}</span>
+                <span className="block text-sm font-medium text-foreground sm:text-base">
+                  {c.name}
+                </span>
                 {c.services && (
-                  <span className="mt-1 block text-xs text-gray">
+                  <span className="mt-1 block text-xs text-gray-muted">
                     {c.services.length} خدمت
                   </span>
                 )}
@@ -93,12 +102,12 @@ export default async function HomePage() {
         </section>
       )}
 
-      <section className="mx-auto max-w-6xl px-4 py-12">
-        <div className="mb-6 flex items-end justify-between gap-4">
-          <h2 className="text-xl font-bold">زیباگران برتر</h2>
+      <section className="mx-auto max-w-6xl px-4 py-10 sm:py-12">
+        <div className="mb-5 flex items-end justify-between gap-4 sm:mb-6">
+          <h2 className="text-lg font-bold text-foreground sm:text-xl">زیباگران برتر</h2>
           <Link
             href="/professionals"
-            className="text-sm font-medium text-coral hover:underline"
+            className="text-sm font-medium text-coral transition-colors hover:text-coral-dark"
           >
             مشاهده همه
           </Link>
@@ -114,7 +123,7 @@ export default async function HomePage() {
           </p>
         )}
         {featured && featured.items.length > 0 && (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {featured.items.map((pro) => (
               <ProfessionalCard key={pro.id} pro={pro} />
             ))}
@@ -122,24 +131,24 @@ export default async function HomePage() {
         )}
       </section>
 
-      <section className="border-t border-border bg-blue-light/40">
-        <div className="mx-auto max-w-6xl px-4 py-14 text-center">
-          <h2 className="text-2xl font-bold text-foreground">
+      <section className="border-t border-border bg-gradient-to-b from-blue-soft/70 to-blue-light/50">
+        <div className="mx-auto max-w-6xl px-4 py-12 text-center sm:py-14">
+          <h2 className="text-xl font-bold text-foreground sm:text-2xl">
             آماده رزرو هستید؟
           </h2>
-          <p className="mt-2 text-gray">
+          <p className="mt-2 text-sm text-gray sm:text-base">
             زیباگر را انتخاب کنید، زمان آزاد را ببینید و نوبت بگیرید.
           </p>
-          <div className="mt-6 flex flex-wrap justify-center gap-3">
+          <div className="mt-6 flex flex-col items-stretch justify-center gap-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
             <Link
               href="/search"
-              className="inline-flex h-11 items-center rounded-2xl bg-coral px-6 text-sm font-medium text-white hover:bg-[#e85a4c]"
+              className="inline-flex h-11 items-center justify-center rounded-2xl bg-coral px-6 text-sm font-medium text-white shadow-sm transition-colors hover:bg-coral-dark"
             >
               شروع جستجو
             </Link>
             <Link
               href="/register"
-              className="inline-flex h-11 items-center rounded-2xl border border-border bg-white px-6 text-sm font-medium hover:bg-gray-light"
+              className="inline-flex h-11 items-center justify-center rounded-2xl border border-border bg-white px-6 text-sm font-medium text-foreground transition-colors hover:border-blue/25 hover:bg-blue-soft"
             >
               ثبت‌نام رایگان
             </Link>
