@@ -44,6 +44,8 @@ export default () => {
     s3SecretKey: process.env.S3_SECRET_KEY || '',
     s3Bucket: process.env.S3_BUCKET || '',
     s3PublicUrl: process.env.S3_PUBLIC_URL || process.env.STORAGE_PUBLIC_URL || '',
+    // Liara default: true. Only set S3_FORCE_PATH_STYLE=false for pure AWS virtual-host.
+    s3ForcePathStyle: (process.env.S3_FORCE_PATH_STYLE || 'true').toLowerCase() !== 'false',
     otpTtlSeconds: parseInt(process.env.OTP_TTL_SECONDS || '300', 10),
     otpMaxAttempts: parseInt(process.env.OTP_MAX_ATTEMPTS || '5', 10),
   };
