@@ -43,64 +43,69 @@ function LoginForm() {
   }
 
   return (
-    <div className="mx-auto flex max-w-md flex-col gap-6 px-4 py-12">
-      <div className="text-center">
-        <h1 className="text-2xl font-bold">ورود به Beautijoo</h1>
-        <p className="mt-2 text-sm text-gray">با شماره موبایل و رمز عبور</p>
-      </div>
-
-      <Card>
-        <form onSubmit={onSubmit} className="space-y-4">
-          <div>
-            <label className="mb-1.5 block text-sm font-medium">شماره موبایل</label>
-            <Input
-              type="tel"
-              inputMode="numeric"
-              placeholder="09123456789"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              required
-              dir="ltr"
-              className="text-left"
-              autoComplete="tel"
-            />
+    <div className="min-h-[calc(100vh-8rem)] bg-gradient-to-b from-blue-soft/80 to-white">
+      <div className="mx-auto flex max-w-md flex-col gap-5 px-4 py-10 sm:gap-6 sm:py-14">
+        <div className="text-center">
+          <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-2xl bg-gradient-to-br from-coral to-coral-dark text-lg font-bold text-white shadow-sm">
+            ب
           </div>
-          <div>
-            <label className="mb-1.5 block text-sm font-medium">رمز عبور</label>
-            <Input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              minLength={8}
-              autoComplete="current-password"
-            />
-          </div>
-          {error && (
-            <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">
-              {error}
-            </p>
-          )}
-          <Button type="submit" className="w-full" loading={loading}>
-            ورود
-          </Button>
-        </form>
-
-        <div className="mt-6 space-y-2 border-t border-border pt-4 text-center text-sm text-gray">
-          <p>
-            ورود با کد یک‌بارمصرف؟{' '}
-            <Link href="/otp" className="font-medium text-coral hover:underline">
-              ورود با OTP
-            </Link>
-          </p>
-          <p>
-            حساب ندارید؟{' '}
-            <Link href="/register" className="font-medium text-coral hover:underline">
-              ثبت‌نام
-            </Link>
-          </p>
+          <h1 className="text-xl font-bold text-foreground sm:text-2xl">ورود به Beautijoo</h1>
+          <p className="mt-2 text-sm text-gray">با شماره موبایل و رمز عبور</p>
         </div>
-      </Card>
+
+        <Card>
+          <form onSubmit={onSubmit} className="space-y-4">
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-foreground">شماره موبایل</label>
+              <Input
+                type="tel"
+                inputMode="numeric"
+                placeholder="09123456789"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                required
+                dir="ltr"
+                className="text-left"
+                autoComplete="tel"
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-foreground">رمز عبور</label>
+              <Input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                minLength={8}
+                autoComplete="current-password"
+              />
+            </div>
+            {error && (
+              <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">
+                {error}
+              </p>
+            )}
+            <Button type="submit" className="w-full" loading={loading}>
+              ورود
+            </Button>
+          </form>
+
+          <div className="mt-6 space-y-2 border-t border-border pt-4 text-center text-sm text-gray">
+            <p>
+              ورود با کد یک‌بارمصرف؟{' '}
+              <Link href="/otp" className="font-medium text-coral hover:text-coral-dark">
+                ورود با OTP
+              </Link>
+            </p>
+            <p>
+              حساب ندارید؟{' '}
+              <Link href="/register" className="font-medium text-coral hover:text-coral-dark">
+                ثبت‌نام
+              </Link>
+            </p>
+          </div>
+        </Card>
+      </div>
     </div>
   );
 }
