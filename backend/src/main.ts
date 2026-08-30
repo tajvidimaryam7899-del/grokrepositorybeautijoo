@@ -13,7 +13,11 @@ async function bootstrap() {
   app.useStaticAssets(join(process.cwd(), 'uploads'), { prefix: '/uploads/' });
   const config = app.get(ConfigService);
 
-  app.use(helmet());
+  app.use(
+    helmet({
+      crossOriginResourcePolicy: { policy: 'cross-origin' },
+    }),
+  );
   app.enableCors({
     origin: config.get<string[]>('corsOrigins') || ['http://localhost:3001'],
     credentials: true,
