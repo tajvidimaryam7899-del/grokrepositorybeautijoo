@@ -1,20 +1,38 @@
-import { Injectable, Logger, OnModuleInit, InternalServerErrorException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleInit,
+  InternalServerErrorException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { StorageProvider } from './storage.provider';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { existsSync, mkdirSync } from 'fs';
+import { existsSync, mkdirSync, accessSync, constants } from 'fs';
 
+/**
+ * Local filesystem storage.
+ * Suitable for development and for production only when a persistent volume
+ * is mounted and STORAGE_LOCAL_PATH points at that mount.
+ *
+ * Without a volume (ephemeral container disk), files disappear on redeploy/restart
+ * and some hosts make parts of the FS read-only — prefer S3/object storage in prod.
+ */
 @Injectable()
 export class LocalStorageProvider implements StorageProvider, OnModuleInit {
   private readonly logger = new Logger(LocalStorageProvider.name);
   private readonly basePath: string;
   private readonly publicBase: string;
+  private writable = false;
 
   constructor(private readonly config: ConfigService) {
-    const configured = config.get<string>('storageLocalPath') || process.env.STORAGE_LOCAL_PATH || './uploads';
+    const configured =
+      config.get<string>('storageLocalPath') ||
+      process.env.STORAGE_LOCAL_PATH ||
+      './uploads';
+
     this.basePath = path.isAbsolute(configured)
-      ? configured
+      ? path.normalize(configured)
       : path.resolve(process.cwd(), configured);
 
     this.publicBase = (
@@ -29,47 +47,96 @@ export class LocalStorageProvider implements StorageProvider, OnModuleInit {
 
   async onModuleInit() {
     try {
-      if (!existsSync(this.basePath)) {
-        mkdirSync(this.basePath, { recursive: true });
-      }
-      const probe = path.join(this.basePath, '.write-probe');
-      await fs.writeFile(probe, 'ok');
+      this.ensureBaseDir();
+      const probe = path.join(this.basePath, `.write-probe-${process.pid}`);
+      await fs.writeFile(probe, 'ok', { mode: 0o644 });
       await fs.unlink(probe).catch(() => undefined);
-      this.logger.log(`Local storage ready at ${this.basePath} publicBase=${this.publicBase || '(relative)'}`);
+      this.writable = true;
+      this.logger.log(
+        `Local storage ready path=${this.basePath} publicBase=${this.publicBase || '(relative)'}`,
+      );
     } catch (err) {
+      this.writable = false;
+      const e = err as NodeJS.ErrnoException;
       this.logger.error(
-        `Cannot write to storage path ${this.basePath}: ${(err as Error).message}. ` +
-          'On Liara attach a persistent disk and set STORAGE_LOCAL_PATH to the mount point.',
+        `Local storage NOT writable path=${this.basePath} code=${e.code || 'unknown'} msg=${e.message}. ` +
+          'Set STORAGE_PROVIDER=s3 with object-storage credentials, or attach a Liara Disk and set STORAGE_LOCAL_PATH to the mount path.',
       );
     }
   }
 
+  private ensureBaseDir() {
+    if (!existsSync(this.basePath)) {
+      mkdirSync(this.basePath, { recursive: true, mode: 0o755 });
+    }
+    accessSync(this.basePath, constants.W_OK);
+  }
+
   async upload(key: string, buffer: Buffer, contentType: string): Promise<string> {
-    const full = path.join(this.basePath, key);
+    const safeKey = key.replace(/^\/+/, '').replace(/\.\./g, '');
+    const full = path.join(this.basePath, safeKey);
+
+    // Prevent path escape outside basePath
+    if (!full.startsWith(this.basePath)) {
+      throw new InternalServerErrorException('مسیر ذخیره‌سازی نامعتبر است.');
+    }
+
     try {
-      await fs.mkdir(path.dirname(full), { recursive: true });
-      await fs.writeFile(full, buffer);
-      this.logger.log(`stored key=${key} bytes=${buffer.length} type=${contentType}`);
-      return key;
-    } catch (err) {
-      this.logger.error(`storage write failed key=${key}: ${(err as Error).message}`);
-      throw new InternalServerErrorException(
-        'ذخیره‌سازی فایل ناموفق بود. فضای دیسک یا دسترسی نوشتن را بررسی کنید.',
+      this.ensureBaseDir();
+      await fs.mkdir(path.dirname(full), { recursive: true, mode: 0o755 });
+      await fs.writeFile(full, buffer, { mode: 0o644 });
+      this.writable = true;
+      this.logger.log(
+        `stored key=${safeKey} bytes=${buffer.length} type=${contentType} path=${full}`,
       );
+      return safeKey;
+    } catch (err) {
+      const e = err as NodeJS.ErrnoException;
+      this.logger.error(
+        `storage write failed key=${safeKey} path=${full} code=${e.code || 'unknown'} errno=${e.errno ?? ''} msg=${e.message}`,
+      );
+
+      let hint = 'ذخیره‌سازی فایل ناموفق بود.';
+      if (e.code === 'EROFS') {
+        hint =
+          'فایل‌سیستم فقط‌خواندنی است. یک Disk پایدار به سرویس وصل کنید یا STORAGE_PROVIDER=s3 تنظیم کنید.';
+      } else if (e.code === 'EACCES' || e.code === 'EPERM') {
+        hint =
+          'دسترسی نوشتن روی مسیر ذخیره‌سازی وجود ندارد. STORAGE_LOCAL_PATH و permission دیسک را بررسی کنید.';
+      } else if (e.code === 'ENOSPC') {
+        hint = 'فضای دیسک پر است.';
+      } else if (e.code === 'ENOENT') {
+        hint =
+          'مسیر ذخیره‌سازی یافت نشد. STORAGE_LOCAL_PATH را روی mount point دیسک تنظیم کنید.';
+      } else {
+        hint =
+          'ذخیره‌سازی فایل ناموفق بود. فضای دیسک یا دسترسی نوشتن را بررسی کنید.';
+      }
+      throw new InternalServerErrorException(hint);
     }
   }
 
   async delete(key: string): Promise<void> {
+    const safeKey = key.replace(/^\/+/, '').replace(/\.\./g, '');
     try {
-      await fs.unlink(path.join(this.basePath, key));
+      await fs.unlink(path.join(this.basePath, safeKey));
     } catch {
-      /* ignore missing files */
+      /* ignore missing */
     }
   }
 
   getPublicUrl(key: string): string {
-    const rel = `/uploads/${key}`;
+    const rel = `/uploads/${key.replace(/^\/+/, '')}`;
     if (this.publicBase) return `${this.publicBase}${rel}`;
     return rel;
+  }
+
+  /** Exposed for diagnostics (not part of StorageProvider interface). */
+  getBasePath(): string {
+    return this.basePath;
+  }
+
+  isWritable(): boolean {
+    return this.writable;
   }
 }
