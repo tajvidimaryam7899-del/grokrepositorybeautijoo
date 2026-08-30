@@ -24,7 +24,16 @@ export class AllExceptionsFilter implements ExceptionFilter {
     let message: string | string[] = 'Internal server error';
     let error = 'Internal Server Error';
 
-    if (exception instanceof HttpException) {
+    if (
+      exception &&
+      typeof exception === 'object' &&
+      'code' in exception &&
+      (exception as { code?: string }).code === 'LIMIT_FILE_SIZE'
+    ) {
+      status = HttpStatus.BAD_REQUEST;
+      message = 'حجم فایل بیش از حد مجاز است (حداکثر ۵۰ مگابایت).';
+      error = 'Bad Request';
+    } else if (exception instanceof HttpException) {
       status = exception.getStatus();
       const body = exception.getResponse();
       if (typeof body === 'string') {
@@ -36,15 +45,26 @@ export class AllExceptionsFilter implements ExceptionFilter {
       }
     } else if (exception instanceof Error) {
       this.logger.error(exception.message, exception.stack);
-      if ((exception as { code?: string }).code === 'P2002') {
+      const code = (exception as { code?: string }).code;
+      if (code === 'P2002') {
         status = HttpStatus.CONFLICT;
         message = 'منبع تکراری است';
         error = 'Conflict';
-      } else if ((exception as { code?: string }).code === 'P2004') {
+      } else if (code === 'P2004') {
         status = HttpStatus.CONFLICT;
         message = 'تداخل زمانی — این بازه قبلاً رزرو شده است';
         error = 'Conflict';
+      } else if (code === 'P2025') {
+        status = HttpStatus.NOT_FOUND;
+        message = 'مورد درخواستی یافت نشد';
+        error = 'Not Found';
       }
+    }
+
+    if (status >= 400 && request.url?.includes('/media')) {
+      this.logger.warn(
+        `media path=${request.method} ${request.url} status=${status} msg=${Array.isArray(message) ? message.join(';') : message}`,
+      );
     }
 
     response.status(status).json({
