@@ -11,7 +11,7 @@ import { ProfileStepper, type WizardStep } from '@/components/profile/stepper';
 import {
   fetchMyProfessional, updateMyProfessional, addMyLocation, setMyWorkingHours,
   fetchPublicServices, upsertMyService, publishMyProfessional,
-  uploadMyMedia, fetchCategories, upsertMyPriceRule,
+  uploadMyMedia, fetchCategories,
   type OwnProfessional, type ProfileCompletion,
 } from '@/lib/panel-api';
 import { friendlyApiError } from '@/lib/api-errors';
@@ -25,6 +25,16 @@ const STEPS: WizardStep[] = [
   { id: 'services', label: 'تخصص‌ها' },
   { id: 'hours', label: 'ساعات کاری' },
   { id: 'review', label: 'بررسی نهایی' },
+];
+
+const WEEK_DAYS = [
+  { value: 'saturday', label: 'شنبه' },
+  { value: 'sunday', label: 'یکشنبه' },
+  { value: 'monday', label: 'دوشنبه' },
+  { value: 'tuesday', label: 'سه‌شنبه' },
+  { value: 'wednesday', label: 'چهارشنبه' },
+  { value: 'thursday', label: 'پنج‌شنبه' },
+  { value: 'friday', label: 'جمعه' },
 ];
 
 type CatalogService = { id: string; name: string };
@@ -60,9 +70,9 @@ export default function ProfileCompletePage() {
   const [selectedServiceId, setSelectedServiceId] = useState('');
   const [svcDuration, setSvcDuration] = useState('60');
   const [svcPrice, setSvcPrice] = useState('300000');
-  const [hourDay, setHourDay] = useState('saturday');
+  const [hourDays, setHourDays] = useState<string[]>(['saturday', 'sunday', 'monday', 'tuesday', 'wednesday', 'thursday']);
   const [hourStart, setHourStart] = useState('10:00');
-  const [hourEnd, setHourEnd] = useState('18:00');
+  const [hourEnd, setHourEnd] = useState('20:00');
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
@@ -187,15 +197,15 @@ export default function ProfileCompletePage() {
   async function saveLocation() {
     setSaving(true); setError(null); setMsg(null);
     try {
-      if (!locName.trim() || !locAddress.trim() || !locCity.trim()) {
-        setError('نام، آدرس و شهر موقعیت الزامی است');
+      if (!locProvince.trim() || !locCity.trim()) {
+        setError('استان و شهر الزامی است');
         return false;
       }
       await addMyLocation({
-        name: locName.trim(),
-        address: locAddress.trim(),
+        name: locName.trim() || undefined,
+        address: locAddress.trim() || undefined,
         city: locCity.trim(),
-        province: locProvince || undefined,
+        province: locProvince.trim(),
         latitude: locLat ?? undefined,
         longitude: locLng ?? undefined,
         isPrimary: true,
@@ -239,7 +249,13 @@ export default function ProfileCompletePage() {
   async function saveHours() {
     setSaving(true); setError(null); setMsg(null);
     try {
-      await setMyWorkingHours({ dayOfWeek: hourDay, startTime: hourStart, endTime: hourEnd });
+      if (!hourDays.length) {
+        setError('حداقل یک روز کاری انتخاب کنید');
+        return false;
+      }
+      for (const day of hourDays) {
+        await setMyWorkingHours({ dayOfWeek: day, startTime: hourStart, endTime: hourEnd });
+      }
       await load();
       setMsg('ساعات کاری ذخیره شد');
       return true;
@@ -275,6 +291,10 @@ export default function ProfileCompletePage() {
     } finally {
       setPublishing(false);
     }
+  }
+
+  function toggleHourDay(day: string) {
+    setHourDays((prev) => prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]);
   }
 
   if (authLoading || loading) return <PanelLoading />;
@@ -316,45 +336,51 @@ export default function ProfileCompletePage() {
       )}
       {step === 2 && (
         <Card className="space-y-4">
-          <h2 className="font-semibold">تصاویر</h2>
-          <p className="text-sm text-gray">آپلود مستقیم فایل — بدون لینک URL.</p>
+          <h2 className="font-semibold">تصاویر پروفایل</h2>
           <div className="grid gap-4 sm:grid-cols-3">
             {([
               { kind: 'avatar' as const, label: 'آواتار', url: avatarUrl },
               { kind: 'cover' as const, label: 'کاور', url: coverImageUrl },
               { kind: 'logo' as const, label: 'لوگو', url: logoUrl },
             ] as const).map(({ kind, label, url }) => (
-              <div key={kind} className="space-y-2 rounded-xl border border-gray-border p-3">
-                <div className="text-sm font-medium">{label}</div>
-                {url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={url} alt={label} className="h-24 w-full rounded-lg object-cover" />
-                ) : (
-                  <div className="flex h-24 items-center justify-center rounded-lg bg-gray-light text-xs text-gray">بدون تصویر</div>
-                )}
-                <input
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp,image/gif"
-                  className="block w-full text-xs"
-                  disabled={!!uploading}
-                  onChange={async (e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-                    setUploading(kind); setError(null); setMsg(null);
-                    try {
-                      const asset = await uploadMyMedia(file, kind);
-                      if (kind === 'avatar') setAvatarUrl(asset.publicUrl);
-                      if (kind === 'cover') setCoverImageUrl(asset.publicUrl);
-                      if (kind === 'logo') setLogoUrl(asset.publicUrl);
-                      setMsg('تصویر آپلود شد');
-                    } catch (err) {
-                      setError(friendlyApiError(err));
-                    } finally {
-                      setUploading(null);
-                    }
-                  }}
-                />
-                {uploading === kind && <span className="text-xs text-blue">در حال آپلود...</span>}
+              <div key={kind} className="flex flex-col gap-2 overflow-hidden rounded-2xl border border-gray-border bg-white shadow-sm">
+                <div className="relative h-28 bg-gray-light">
+                  {url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={url} alt={label} className="h-full w-full object-cover" />
+                  ) : (
+                    <div className="flex h-full items-center justify-center text-xs text-gray">بدون تصویر</div>
+                  )}
+                </div>
+                <div className="flex items-center justify-between px-3 pb-3">
+                  <span className="text-sm font-medium">{label}</span>
+                  <label className="cursor-pointer rounded-lg bg-coral px-3 py-1.5 text-xs font-medium text-white hover:opacity-90">
+                    {uploading === kind ? '...' : url ? 'تعویض' : 'آپلود'}
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/gif"
+                      className="hidden"
+                      disabled={!!uploading}
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        setUploading(kind); setError(null); setMsg(null);
+                        try {
+                          const asset = await uploadMyMedia(file, kind);
+                          if (kind === 'avatar') setAvatarUrl(asset.publicUrl);
+                          if (kind === 'cover') setCoverImageUrl(asset.publicUrl);
+                          if (kind === 'logo') setLogoUrl(asset.publicUrl);
+                          setMsg('تصویر آپلود شد');
+                        } catch (err) {
+                          setError(friendlyApiError(err));
+                        } finally {
+                          setUploading(null);
+                          e.target.value = '';
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
               </div>
             ))}
           </div>
@@ -363,12 +389,8 @@ export default function ProfileCompletePage() {
       {step === 3 && (
         <Card className="space-y-4">
           <h2 className="font-semibold">موقعیت مکانی</h2>
-          <label className="block space-y-1 text-sm">نام محل
-            <Input value={locName} onChange={(e) => setLocName(e.target.value)} placeholder="سالن زیبایی ..." /></label>
-          <label className="block space-y-1 text-sm">آدرس
-            <Input value={locAddress} onChange={(e) => setLocAddress(e.target.value)} /></label>
           <div className="grid grid-cols-2 gap-3">
-            <label className="block space-y-1 text-sm">استان
+            <label className="block space-y-1 text-sm">استان *
               <select className="w-full rounded-xl border border-gray-border p-3 text-sm" value={locProvince}
                 onChange={(e) => {
                   const name = e.target.value;
@@ -381,7 +403,7 @@ export default function ProfileCompletePage() {
                 {IRAN_PROVINCES.map((pr) => <option key={pr.name} value={pr.name}>{pr.name}</option>)}
               </select>
             </label>
-            <label className="block space-y-1 text-sm">شهر
+            <label className="block space-y-1 text-sm">شهر *
               <select className="w-full rounded-xl border border-gray-border p-3 text-sm" value={locCity}
                 disabled={!locProvince}
                 onChange={(e) => {
@@ -395,20 +417,36 @@ export default function ProfileCompletePage() {
               </select>
             </label>
           </div>
+          <label className="block space-y-1 text-sm">آدرس (اختیاری)
+            <Input value={locAddress} onChange={(e) => setLocAddress(e.target.value)} placeholder="خیابان، پلاک، ..." /></label>
+          <label className="block space-y-1 text-sm">نام سالن / محل (اختیاری)
+            <Input value={locName} onChange={(e) => setLocName(e.target.value)} placeholder="سالن زیبایی ..." /></label>
           {locLat != null && locLng != null && (
-            <p className="text-xs text-gray">مختصات: {locLat.toFixed(4)}, {locLng.toFixed(4)}</p>
+            <div className="rounded-xl border border-gray-border bg-gray-light p-3 text-sm">
+              <div className="mb-1 font-medium text-gray">مختصات روی نقشه</div>
+              <div className="text-xs text-gray">عرض: {locLat.toFixed(5)} — طول: {locLng.toFixed(5)}</div>
+              <a
+                className="mt-2 inline-block text-xs text-blue hover:underline"
+                href={`https://www.openstreetmap.org/?mlat=${locLat}&mlon=${locLng}#map=14/${locLat}/${locLng}`}
+                target="_blank"
+                rel="noreferrer"
+              >مشاهده روی نقشه</a>
+            </div>
           )}
         </Card>
       )}
       {step === 4 && (
         <Card className="space-y-4">
-          <h2 className="font-semibold">تخصص‌ها</h2>
-          <label className="block space-y-1 text-sm">انتخاب خدمت
+          <h2 className="font-semibold">تخصص‌ها و قیمت</h2>
+          <label className="block space-y-1 text-sm">انتخاب خدمت از کاتالوگ
             <select className="w-full rounded-xl border border-gray-border p-3 text-sm" value={selectedServiceId}
               onChange={(e) => setSelectedServiceId(e.target.value)}>
               <option value="">انتخاب کنید</option>
               {catalog.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select></label>
+          {!catalog.length && (
+            <p className="text-xs text-coral">لیست خدمات خالی است — ممکن است هنوز در دیتابیس seed نشده باشد.</p>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <label className="block space-y-1 text-sm">مدت (دقیقه)
               <Input value={svcDuration} onChange={(e) => setSvcDuration(e.target.value)} /></label>
@@ -420,22 +458,25 @@ export default function ProfileCompletePage() {
       {step === 5 && (
         <Card className="space-y-4">
           <h2 className="font-semibold">ساعات کاری</h2>
-          <label className="block space-y-1 text-sm">روز هفته
-            <select className="w-full rounded-xl border border-gray-border p-3 text-sm" value={hourDay}
-              onChange={(e) => setHourDay(e.target.value)}>
-              <option value="saturday">شنبه</option>
-              <option value="sunday">یکشنبه</option>
-              <option value="monday">دوشنبه</option>
-              <option value="tuesday">سه‌شنبه</option>
-              <option value="wednesday">چهارشنبه</option>
-              <option value="thursday">پنج‌شنبه</option>
-              <option value="friday">جمعه</option>
-            </select></label>
+          <div className="flex flex-wrap gap-2">
+            {WEEK_DAYS.map((d) => (
+              <button
+                key={d.value}
+                type="button"
+                onClick={() => toggleHourDay(d.value)}
+                className={`rounded-full px-3 py-1.5 text-sm border ${
+                  hourDays.includes(d.value)
+                    ? 'border-coral bg-coral text-white'
+                    : 'border-gray-border bg-white text-gray'
+                }`}
+              >{d.label}</button>
+            ))}
+          </div>
           <div className="grid grid-cols-2 gap-3">
-            <label className="block space-y-1 text-sm">شروع
-              <Input value={hourStart} onChange={(e) => setHourStart(e.target.value)} /></label>
-            <label className="block space-y-1 text-sm">پایان
-              <Input value={hourEnd} onChange={(e) => setHourEnd(e.target.value)} /></label>
+            <label className="block space-y-1 text-sm">ساعت شروع
+              <Input type="time" value={hourStart} onChange={(e) => setHourStart(e.target.value)} /></label>
+            <label className="block space-y-1 text-sm">ساعت پایان
+              <Input type="time" value={hourEnd} onChange={(e) => setHourEnd(e.target.value)} /></label>
           </div>
         </Card>
       )}
