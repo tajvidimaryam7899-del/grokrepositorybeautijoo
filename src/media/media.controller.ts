@@ -1,5 +1,17 @@
-import { Controller, Post, Get, Delete, Param, Query, Body, UploadedFile, UseInterceptors } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Get,
+  Delete,
+  Param,
+  Query,
+  Body,
+  UploadedFile,
+  UseInterceptors,
+  BadRequestException,
+} from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import { ApiBearerAuth, ApiBody, ApiConsumes, ApiTags } from '@nestjs/swagger';
 import { MediaKind } from '@prisma/client';
 import { MediaService } from './media.service';
@@ -30,13 +42,30 @@ export class MediaController {
       },
     },
   })
-  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 50 * 1024 * 1024 } }))
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: 50 * 1024 * 1024 },
+    }),
+  )
   upload(
     @CurrentUser('id') userId: string,
-    @UploadedFile() file: { buffer: Buffer; mimetype: string; originalname: string; size: number },
+    @UploadedFile()
+    file: {
+      buffer: Buffer;
+      mimetype: string;
+      originalname: string;
+      size: number;
+    },
     @Body('kind') kind: MediaKind,
     @Body('professionalServiceId') professionalServiceId?: string,
   ) {
+    if (!file) {
+      throw new BadRequestException('فایل ارسال نشده است');
+    }
+    if (!kind) {
+      throw new BadRequestException('نوع تصویر (kind) الزامی است');
+    }
     return this.service.upload(userId, file, kind, professionalServiceId);
   }
 
