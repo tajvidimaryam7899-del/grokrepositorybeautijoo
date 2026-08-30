@@ -1,21 +1,37 @@
 import {
   Injectable,
   NotFoundException,
+  ForbiddenException,
   ConflictException,
   BadRequestException,
-  ForbiddenException,
 } from '@nestjs/common';
-import { Prisma, ProfessionalStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { ProfessionalStatus, Prisma } from '@prisma/client';
 
-const COMPLETION_LABELS: Record<string, string> = {
+export type CompletionFieldKey =
+  | 'title'
+  | 'firstName'
+  | 'lastName'
+  | 'bio'
+  | 'avatarOrCover'
+  | 'location'
+  | 'service'
+  | 'workingHours';
+
+export type CompletionResult = {
+  percent: number;
+  complete: boolean;
+  fields: Array<{ key: CompletionFieldKey; label: string; done: boolean }>;
+};
+
+const COMPLETION_LABELS: Record<CompletionFieldKey, string> = {
   title: '\u0639\u0646\u0648\u0627\u0646 \u062d\u0631\u0641\u0647\u200c\u0627\u06cc',
   firstName: '\u0646\u0627\u0645',
   lastName: '\u0646\u0627\u0645 \u062e\u0627\u0646\u0648\u0627\u062f\u06af\u06cc',
-  bio: '\u0645\u0639\u0631\u0641\u06cc',
-  avatarOrCover: '\u062a\u0635\u0648\u06cc\u0631 \u067e\u0631\u0648\u0641\u0627\u06cc\u0644',
-  location: '\u0645\u0648\u0642\u0639\u06cc\u062a',
-  service: '\u062a\u062e\u0635\u0635',
+  bio: '\u0645\u0639\u0631\u0641\u06cc / \u0628\u06cc\u0648',
+  avatarOrCover: '\u062a\u0635\u0648\u06cc\u0631 \u067e\u0631\u0648\u0641\u0627\u06cc\u0644 \u06cc\u0627 \u06a9\u0627\u0648\u0631',
+  location: '\u0645\u0648\u0642\u0639\u06cc\u062a \u0645\u06a9\u0627\u0646\u06cc',
+  service: '\u062d\u062f\u0627\u0642\u0644 \u06cc\u06a9 \u062a\u062e\u0635\u0635',
   workingHours: '\u0633\u0627\u0639\u0627\u062a \u06a9\u0627\u0631\u06cc',
 };
 
@@ -23,11 +39,57 @@ const COMPLETION_LABELS: Record<string, string> = {
 export class ProfessionalsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  requireOwnProfessional(userId: string) {
-    return this.prisma.professional.findUnique({ where: { userId } }).then((pro) => {
-      if (!pro) throw new NotFoundException('\u067e\u0631\u0648\u0641\u0627\u06cc\u0644 \u0632\u06cc\u0628\u0627\u06af\u0631 \u06cc\u0627\u0641\u062a \u0646\u0634\u062f');
-      return pro;
+  async search(params: {
+    q?: string; city?: string; category?: string; page?: number; limit?: number;
+  }) {
+    const page = params.page || 1;
+    const limit = Math.min(params.limit || 20, 50);
+    const skip = (page - 1) * limit;
+    const where: Prisma.ProfessionalWhereInput = { status: ProfessionalStatus.approved, publishedAt: { not: null } };
+    if (params.q) {
+      where.OR = [
+        { title: { contains: params.q, mode: 'insensitive' } },
+        { bio: { contains: params.q, mode: 'insensitive' } },
+        { slug: { contains: params.q, mode: 'insensitive' } },
+      ];
+    }
+    if (params.city) {
+      where.locations = {
+        some: { location: { city: { contains: params.city, mode: 'insensitive' } } },
+      };
+    }
+    if (params.category) {
+      where.professionalServices = {
+        some: { service: { category: { slug: params.category } }, isActive: true },
+      };
+    }
+    const [items, total] = await Promise.all([
+      this.prisma.professional.findMany({
+        where, skip, take: limit,
+        orderBy: [{ isFeatured: 'desc' }, { ratingAvg: 'desc' }],
+        include: {
+          user: { select: { profile: { select: { displayName: true, avatarUrl: true } } } },
+          locations: { include: { location: true }, where: { isPrimary: true }, take: 1 },
+          professionalServices: {
+            where: { isActive: true }, take: 5,
+            include: { service: { select: { name: true, slug: true } } },
+          },
+        },
+      }),
+      this.prisma.professional.count({ where }),
+    ]);
+    return { items, meta: { page, limit, total } };
+  }
+
+  async findBySlug(slug: string) {
+    const pro = await this.prisma.professional.findUnique({
+      where: { slug },
+      include: this.publicInclude(),
     });
+    if (!pro || pro.status !== ProfessionalStatus.approved || !pro.publishedAt) {
+      throw new NotFoundException('\u067e\u0631\u0648\u0641\u0627\u06cc\u0644 \u06cc\u0627\u0641\u062a \u0646\u0634\u062f');
+    }
+    return pro;
   }
 
   async getOwn(userId: string) {
@@ -81,7 +143,7 @@ export class ProfessionalsService {
     const profileData: Prisma.ProfileUpdateInput = {};
     if (data.firstName !== undefined) profileData.firstName = data.firstName.trim() || null;
     if (data.lastName !== undefined) profileData.lastName = data.lastName.trim() || null;
-    if (data.displayName !== undefined) profileData.displayName = data.displayName.trim();
+    if (data.displayName !== undefined && data.displayName.trim()) profileData.displayName = data.displayName.trim();
     if (data.avatarUrl !== undefined) profileData.avatarUrl = data.avatarUrl.trim() || null;
     if (data.profileBio !== undefined) profileData.bio = data.profileBio.trim() || null;
 
@@ -89,7 +151,18 @@ export class ProfessionalsService {
       await this.prisma.professional.update({ where: { id: pro.id }, data: proData });
     }
     if (Object.keys(profileData).length) {
-      await this.prisma.profile.update({ where: { userId }, data: profileData });
+      await this.prisma.profile.upsert({
+        where: { userId },
+        update: profileData,
+        create: {
+          userId,
+          displayName: (data.displayName || data.firstName || 'User').trim(),
+          firstName: data.firstName?.trim() || null,
+          lastName: data.lastName?.trim() || null,
+          avatarUrl: data.avatarUrl?.trim() || null,
+          bio: data.profileBio?.trim() || null,
+        },
+      });
     }
     return this.getOwn(userId);
   }
@@ -123,6 +196,12 @@ export class ProfessionalsService {
     return this.getOwn(userId);
   }
 
+  async requireOwnProfessional(userId: string) {
+    const pro = await this.prisma.professional.findUnique({ where: { userId } });
+    if (!pro) throw new NotFoundException('\u067e\u0631\u0648\u0641\u0627\u06cc\u0644 \u0632\u06cc\u0628\u0627\u06af\u0631 \u06cc\u0627\u0641\u062a \u0646\u0634\u062f');
+    return pro;
+  }
+
   computeCompletion(pro: {
     title?: string | null; bio?: string | null; coverImageUrl?: string | null;
     user?: { profile?: {
@@ -151,7 +230,7 @@ export class ProfessionalsService {
       Array.isArray(pro.workingHours) &&
       pro.workingHours.some((h) => h.isActive !== false);
 
-    const fields = [
+    const fields: CompletionResult['fields'] = [
       { key: 'title', label: COMPLETION_LABELS.title, done: hasTitle },
       { key: 'firstName', label: COMPLETION_LABELS.firstName, done: hasFirst },
       { key: 'lastName', label: COMPLETION_LABELS.lastName, done: hasLast },
@@ -202,49 +281,5 @@ export class ProfessionalsService {
     });
     if (!pro) throw new NotFoundException('\u067e\u0631\u0648\u0641\u0627\u06cc\u0644 \u0632\u06cc\u0628\u0627\u06af\u0631 \u06cc\u0627\u0641\u062a \u0646\u0634\u062f');
     return pro;
-  }
-
-  async findPublicBySlug(slug: string) {
-    const pro = await this.prisma.professional.findFirst({
-      where: { slug, status: ProfessionalStatus.approved, publishedAt: { not: null } },
-      include: this.publicInclude(),
-    });
-    if (!pro) throw new NotFoundException();
-    return pro;
-  }
-
-  async searchPublic(params: { q?: string; city?: string; page?: number; limit?: number }) {
-    const page = params.page || 1;
-    const limit = Math.min(params.limit || 20, 50);
-    const where: Prisma.ProfessionalWhereInput = {
-      status: ProfessionalStatus.approved,
-      publishedAt: { not: null },
-      ...(params.q
-        ? {
-            OR: [
-              { title: { contains: params.q, mode: 'insensitive' } },
-              { bio: { contains: params.q, mode: 'insensitive' } },
-              { slug: { contains: params.q, mode: 'insensitive' } },
-            ],
-          }
-        : {}),
-      ...(params.city
-        ? { locations: { some: { location: { city: { contains: params.city, mode: 'insensitive' } } } } }
-        : {}),
-    };
-    const [items, total] = await Promise.all([
-      this.prisma.professional.findMany({
-        where,
-        include: {
-          user: { select: { profile: { select: { displayName: true, avatarUrl: true } } } },
-          locations: { include: { location: true }, take: 1 },
-        },
-        orderBy: [{ isFeatured: 'desc' }, { ratingAvg: 'desc' }, { publishedAt: 'desc' }],
-        skip: (page - 1) * limit,
-        take: limit,
-      }),
-      this.prisma.professional.count({ where }),
-    ]);
-    return { items, total, page, limit };
   }
 }
