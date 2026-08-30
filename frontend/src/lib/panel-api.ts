@@ -144,7 +144,6 @@ export async function addMyLocation(payload: {
   latitude?: number;
   longitude?: number;
   isPrimary?: boolean;
-  precision?: 'exact' | 'approximate';
 }) {
   return apiClient.post('/professionals/me/locations', payload);
 }
@@ -156,7 +155,6 @@ export async function updateMyLocation(id: string, payload: {
   latitude?: number;
   longitude?: number;
   isPrimary?: boolean;
-  precision?: 'exact' | 'approximate';
 }) {
   return apiClient.patch(`/professionals/me/locations/${id}`, payload);
 }
