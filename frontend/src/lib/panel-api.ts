@@ -127,7 +127,15 @@ export async function fetchMyLocations() {
   const res = await apiClient.get<LocationItem[] | Paginated<LocationItem>>('/professionals/me/locations');
   return unwrapList(res as Paginated<LocationItem>);
 }
-export async function addMyLocation(payload: { name: string; address: string; city: string; province?: string; latitude?: number; longitude?: number; isPrimary?: boolean }) {
+export async function addMyLocation(payload: {
+  name?: string;
+  address?: string;
+  city: string;
+  province?: string;
+  latitude?: number;
+  longitude?: number;
+  isPrimary?: boolean;
+}) {
   return apiClient.post('/professionals/me/locations', payload);
 }
 export async function fetchMyWorkingHours() {
