@@ -58,6 +58,15 @@ function unwrapList<T>(res: Paginated<T> | T[]): T[] {
   return res.items ?? res.data ?? [];
 }
 
+/** Resolve /uploads/... relative URLs against API origin (not /api/v1). */
+export function resolveMediaUrl(url: string | null | undefined): string {
+  if (!url) return '';
+  if (/^https?:\/\//i.test(url)) return url;
+  const api = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api/v1').replace(/\/$/, '');
+  const origin = api.replace(/\/api\/v1$/i, '');
+  return `${origin}${url.startsWith('/') ? url : `/${url}`}`;
+}
+
 export async function fetchMyBookings(page = 1, limit = 20) {
   const res = await apiClient.get<Paginated<BookingListItem> | BookingListItem[]>(`/bookings/mine?page=${page}&limit=${limit}`);
   return { items: unwrapList(res), raw: res };
@@ -135,8 +144,21 @@ export async function addMyLocation(payload: {
   latitude?: number;
   longitude?: number;
   isPrimary?: boolean;
+  precision?: 'exact' | 'approximate';
 }) {
   return apiClient.post('/professionals/me/locations', payload);
+}
+export async function updateMyLocation(id: string, payload: {
+  name?: string;
+  address?: string;
+  city: string;
+  province?: string;
+  latitude?: number;
+  longitude?: number;
+  isPrimary?: boolean;
+  precision?: 'exact' | 'approximate';
+}) {
+  return apiClient.patch(`/professionals/me/locations/${id}`, payload);
 }
 export async function fetchMyWorkingHours() {
   const res = await apiClient.get<WorkingHourItem[] | Paginated<WorkingHourItem>>('/professionals/me/working-hours');
@@ -199,12 +221,14 @@ export async function uploadMyMedia(file: File, kind: string, professionalServic
     } catch { /* ignore */ }
     throw new Error(msg);
   }
-  return res.json() as Promise<MediaAssetItem>;
+  const asset = (await res.json()) as MediaAssetItem;
+  return { ...asset, publicUrl: resolveMediaUrl(asset.publicUrl) };
 }
 
 export async function fetchMyMedia(kind?: string) {
   const q = kind ? `?kind=${encodeURIComponent(kind)}` : '';
-  return apiClient.get<MediaAssetItem[]>(`/professionals/me/media${q}`);
+  const list = await apiClient.get<MediaAssetItem[]>(`/professionals/me/media${q}`);
+  return (list || []).map((a) => ({ ...a, publicUrl: resolveMediaUrl(a.publicUrl) }));
 }
 
 export async function deleteMyMedia(id: string) {
