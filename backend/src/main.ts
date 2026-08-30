@@ -6,7 +6,7 @@ import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
 import { NestExpressApplication } from '@nestjs/platform-express';
-import { join } from 'path';
+import { join, isAbsolute, normalize, resolve } from 'path';
 import { existsSync, mkdirSync } from 'fs';
 
 async function bootstrap() {
@@ -14,25 +14,43 @@ async function bootstrap() {
   const config = app.get(ConfigService);
   const logger = new Logger('Bootstrap');
 
-  const storagePath =
-    process.env.STORAGE_LOCAL_PATH ||
-    config.get<string>('storageLocalPath') ||
-    './uploads';
-  const uploadsAbs = storagePath.startsWith('/')
-    ? storagePath
-    : join(process.cwd(), storagePath);
+  const storageKind = (
+    process.env.STORAGE_PROVIDER ||
+    config.get<string>('storageProvider') ||
+    'local'
+  ).toLowerCase();
 
-  if (!existsSync(uploadsAbs)) {
-    mkdirSync(uploadsAbs, { recursive: true });
+  // Local static serving only applies when using local disk provider
+  if (storageKind === 'local' || storageKind === '') {
+    const storagePath =
+      process.env.STORAGE_LOCAL_PATH ||
+      config.get<string>('storageLocalPath') ||
+      './uploads';
+    const uploadsAbs = isAbsolute(storagePath)
+      ? normalize(storagePath)
+      : resolve(process.cwd(), storagePath);
+
+    try {
+      if (!existsSync(uploadsAbs)) {
+        mkdirSync(uploadsAbs, { recursive: true, mode: 0o755 });
+      }
+    } catch (err) {
+      logger.error(
+        `Cannot create uploads dir ${uploadsAbs}: ${(err as Error).message}`,
+      );
+    }
+
+    app.useStaticAssets(uploadsAbs, {
+      prefix: '/uploads/',
+      setHeaders: (res) => {
+        res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+        res.setHeader('Cache-Control', 'public, max-age=86400');
+      },
+    });
+    logger.log(`Static /uploads → ${uploadsAbs}`);
+  } else {
+    logger.log(`STORAGE_PROVIDER=${storageKind} — static /uploads disabled (object storage serves files)`);
   }
-  app.useStaticAssets(uploadsAbs, {
-    prefix: '/uploads/',
-    setHeaders: (res) => {
-      res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-      res.setHeader('Cache-Control', 'public, max-age=86400');
-    },
-  });
-  logger.log(`Static /uploads → ${uploadsAbs}`);
 
   app.use(
     helmet({
