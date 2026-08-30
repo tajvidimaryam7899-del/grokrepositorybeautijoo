@@ -18,9 +18,19 @@ export type FavoriteItem = {
 export type NotificationItem = { id: string; title?: string; body?: string; message?: string; readAt?: string | null; createdAt: string; type?: string };
 export type ProfessionalServiceItem = {
   id: string; serviceId: string; durationMin: number; price: number; bufferMin?: number; description?: string | null; isActive?: boolean;
-  service?: { id: string; name: string; category?: { name?: string } | null };
+  service?: { id: string; name: string; category?: { name?: string; id?: string } | null };
+  priceRules?: PriceRuleItem[];
+  durationRules?: DurationRuleItem[];
 };
-export type LocationItem = { id: string; name: string; address: string; city: string; province?: string | null; isPrimary?: boolean };
+export type PriceRuleItem = { id: string; label: string; price: number; attributes?: Record<string, unknown> | null; sortOrder?: number; isActive?: boolean };
+export type DurationRuleItem = { id: string; label: string; durationMin: number; durationMaxMin?: number | null; attributes?: Record<string, unknown> | null; sortOrder?: number; isActive?: boolean };
+export type MediaAssetItem = { id: string; kind: string; publicUrl: string; mimeType: string; status: string; title?: string | null; sortOrder?: number };
+export type CatalogCategory = {
+  id: string; name: string; slug: string;
+  services?: { id: string; name: string }[];
+  children?: CatalogCategory[];
+};
+export type LocationItem = { id: string; name: string; address: string; city: string; province?: string | null; latitude?: number | null; longitude?: number | null; isPrimary?: boolean };
 export type WorkingHourItem = { id?: string; dayOfWeek: string; startTime: string; endTime: string; breaks?: { startTime: string; endTime: string }[] };
 export type AdminStats = { users?: number; professionals?: number; bookings?: number; [key: string]: unknown };
 export type AdminUser = { id: string; phone?: string | null; email?: string | null; status?: string; roles?: string[]; profile?: { displayName?: string | null } | null; createdAt?: string };
@@ -36,7 +46,8 @@ export type OwnProfessional = {
     displayName?: string | null; firstName?: string | null; lastName?: string | null;
     avatarUrl?: string | null; bio?: string | null;
   } | null } | null;
-  locations?: Array<{ isPrimary?: boolean; location: { id: string; name: string; address: string; city: string; province?: string | null } }>;
+  locations?: Array<{ isPrimary?: boolean; location: { id: string; name: string; address: string; city: string; province?: string | null; latitude?: number | null; longitude?: number | null } }>;
+  logoUrl?: string | null;
   professionalServices?: ProfessionalServiceItem[];
   workingHours?: WorkingHourItem[];
   completion?: ProfileCompletion;
@@ -71,11 +82,7 @@ export async function fetchUnreadCount() {
 export async function markNotificationRead(id: string) {
   return apiClient.patch(`/notifications/${id}/read`);
 }
-export async function fetchProBookings(page = 1, limit = 20) {
-  const res = await apiClient.get<Paginated<BookingListItem> | BookingListItem[]>(`/bookings/professional?page=${page}&limit=${limit}`);
-  return { items: unwrapList(res), raw: res };
-}
-export async function transitionBooking(id: string, action: 'confirm' | 'reject' | 'cancel' | 'complete', reason?: string) {
+export async function respondBooking(id: string, action: 'confirm' | 'reject' | 'cancel' | 'complete', reason?: string) {
   return apiClient.patch(`/bookings/${id}/${action}`, reason ? { reason } : undefined);
 }
 export async function fetchMyServices() {
@@ -97,11 +104,7 @@ export async function fetchMyCompletion() {
 export async function fetchMyPreview() {
   return apiClient.get<OwnProfessional>('/professionals/me/preview');
 }
-export async function updateMyProfessional(payload: {
-  title?: string; bio?: string; coverImageUrl?: string;
-  firstName?: string; lastName?: string; displayName?: string;
-  avatarUrl?: string; profileBio?: string;
-}) {
+export async function updateMyProfessional(payload: Record<string, unknown>) {
   return apiClient.patch<OwnProfessional>('/professionals/me', payload);
 }
 export async function publishMyProfessional() {
@@ -114,7 +117,7 @@ export async function fetchMyLocations() {
   const res = await apiClient.get<LocationItem[] | Paginated<LocationItem>>('/professionals/me/locations');
   return unwrapList(res as Paginated<LocationItem>);
 }
-export async function addMyLocation(payload: { name: string; address: string; city: string; province?: string; isPrimary?: boolean }) {
+export async function addMyLocation(payload: { name: string; address: string; city: string; province?: string; latitude?: number; longitude?: number; isPrimary?: boolean }) {
   return apiClient.post('/professionals/me/locations', payload);
 }
 export async function fetchMyWorkingHours() {
@@ -154,4 +157,65 @@ export async function fetchAdminBookings(page = 1, limit = 20) {
 export async function fetchAuditLogs(page = 1, limit = 50) {
   const res = await apiClient.get<Paginated<AuditLogItem> | AuditLogItem[]>(`/admin/audit-logs?page=${page}&limit=${limit}`);
   return { items: unwrapList(res), raw: res };
+}
+
+// ── Media ─────────────────────────────────────────────────────
+export async function uploadMyMedia(file: File, kind: string, professionalServiceId?: string) {
+  const { getAccessToken } = await import('./auth-storage');
+  const API_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api/v1').replace(/\/$/, '');
+  const token = getAccessToken();
+  const form = new FormData();
+  form.append('file', file);
+  form.append('kind', kind);
+  if (professionalServiceId) form.append('professionalServiceId', professionalServiceId);
+  const res = await fetch(`${API_URL}/professionals/me/media/upload`, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: form,
+  });
+  if (!res.ok) {
+    let msg = 'آپلود ناموفق';
+    try {
+      const body = await res.json();
+      msg = Array.isArray(body?.message) ? body.message.join(', ') : (body?.message || msg);
+    } catch { /* ignore */ }
+    throw new Error(msg);
+  }
+  return res.json() as Promise<MediaAssetItem>;
+}
+
+export async function fetchMyMedia(kind?: string) {
+  const q = kind ? `?kind=${encodeURIComponent(kind)}` : '';
+  return apiClient.get<MediaAssetItem[]>(`/professionals/me/media${q}`);
+}
+
+export async function deleteMyMedia(id: string) {
+  return apiClient.delete(`/professionals/me/media/${id}`);
+}
+
+export async function publishMyMedia(ids: string[]) {
+  return apiClient.post('/professionals/me/media/publish', { ids });
+}
+
+export async function fetchCategories() {
+  return apiClient.get<CatalogCategory[]>('/categories');
+}
+
+export async function fetchMyPriceRules(psId: string) {
+  return apiClient.get<PriceRuleItem[]>(`/professionals/me/services/${psId}/price-rules`);
+}
+export async function upsertMyPriceRule(psId: string, payload: { id?: string; label: string; price: number; attributes?: Record<string, unknown>; sortOrder?: number }) {
+  return apiClient.post<PriceRuleItem>(`/professionals/me/services/${psId}/price-rules`, payload);
+}
+export async function deleteMyPriceRule(id: string) {
+  return apiClient.delete(`/professionals/me/price-rules/${id}`);
+}
+export async function fetchMyDurationRules(psId: string) {
+  return apiClient.get<DurationRuleItem[]>(`/professionals/me/services/${psId}/duration-rules`);
+}
+export async function upsertMyDurationRule(psId: string, payload: { id?: string; label: string; durationMin: number; durationMaxMin?: number; attributes?: Record<string, unknown>; sortOrder?: number }) {
+  return apiClient.post<DurationRuleItem>(`/professionals/me/services/${psId}/duration-rules`, payload);
+}
+export async function deleteMyDurationRule(id: string) {
+  return apiClient.delete(`/professionals/me/duration-rules/${id}`);
 }
