@@ -202,24 +202,46 @@ export async function fetchAuditLogs(page = 1, limit = 50) {
 // ── Media ─────────────────────────────────────────────────────
 export async function uploadMyMedia(file: File, kind: string, professionalServiceId?: string) {
   const { getAccessToken } = await import('./auth-storage');
+  const { ApiError } = await import('./api');
   const API_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api/v1').replace(/\/$/, '');
   const token = getAccessToken();
+
+  const allowed = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
+  if (!allowed.has(file.type)) {
+    throw new ApiError(400, 'فرمت این تصویر پشتیبانی نمی‌شود. فقط JPG، PNG، WEBP و GIF مجاز است.');
+  }
+  if (file.size > 8 * 1024 * 1024) {
+    throw new ApiError(400, 'حجم تصویر بیش از حد مجاز است (حداکثر ۸ مگابایت).');
+  }
+  if (!token) {
+    throw new ApiError(401, 'برای آپلود باید وارد حساب کاربری شوید.');
+  }
+
   const form = new FormData();
   form.append('file', file);
   form.append('kind', kind);
   if (professionalServiceId) form.append('professionalServiceId', professionalServiceId);
-  const res = await fetch(`${API_URL}/professionals/me/media/upload`, {
-    method: 'POST',
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-    body: form,
-  });
+
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}/professionals/me/media/upload`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+      body: form,
+    });
+  } catch {
+    throw new ApiError(0, 'ارتباط با سرور برقرار نشد. اتصال اینترنت را بررسی کنید.');
+  }
+
   if (!res.ok) {
     let msg = 'آپلود ناموفق';
+    let body: unknown;
     try {
-      const body = await res.json();
-      msg = Array.isArray(body?.message) ? body.message.join(', ') : (body?.message || msg);
+      body = await res.json();
+      const m = (body as { message?: string | string[] })?.message;
+      msg = Array.isArray(m) ? m.join(', ') : (m || msg);
     } catch { /* ignore */ }
-    throw new Error(msg);
+    throw new ApiError(res.status, String(msg), body);
   }
   const asset = (await res.json()) as MediaAssetItem;
   return { ...asset, publicUrl: resolveMediaUrl(asset.publicUrl) };
