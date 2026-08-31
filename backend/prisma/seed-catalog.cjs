@@ -1,147 +1,59 @@
 /**
- * Production-safe catalog seed (categories + services).
+ * Production-safe catalog seed (categories + optional sample hierarchy).
  * Idempotent upserts — safe to run on every deploy/start.
+ *
+ * Root categories are the 19 Beautijoo service families.
+ * Hierarchy is dynamic (parentId) — professionals can add deeper nodes later.
  */
 const { PrismaClient } = require('@prisma/client');
 
 const prisma = new PrismaClient();
 
-const CATALOG = [
+/** 19 root categories — hard-coded seed only; structure remains dynamic */
+const ROOT_CATEGORIES = [
+  { name: '\u06a9\u0648\u062a\u0627\u0647\u06cc', slug: 'cut', sortOrder: 1 },
+  { name: '\u0631\u0646\u06af \u0648 \u0644\u0627\u06cc\u062a', slug: 'color-light', sortOrder: 2 },
+  { name: '\u06a9\u0631\u0627\u062a\u06cc\u0646\u060c \u0641\u0631 \u0648 \u0627\u062d\u06cc\u0627', slug: 'keratin-perm-restore', sortOrder: 3 },
+  { name: '\u0646\u0627\u062e\u0646', slug: 'nails', sortOrder: 4 },
+  { name: '\u0645\u0698\u0647', slug: 'lashes', sortOrder: 5 },
+  { name: '\u0627\u0628\u0631\u0648', slug: 'brows', sortOrder: 6 },
+  { name: '\u067e\u0648\u0633\u062a \u0648 \u0641\u06cc\u0634\u06cc\u0627\u0644', slug: 'skin-facial', sortOrder: 7 },
+  { name: '\u0645\u06cc\u06a9\u0627\u067e \u0648 \u06af\u0631\u06cc\u0645', slug: 'makeup-grooming', sortOrder: 8 },
+  { name: '\u0627\u0635\u0644\u0627\u062d', slug: 'shaping', sortOrder: 9 },
+  { name: '\u0627\u067e\u06cc\u0644\u0627\u0633\u06cc\u0648\u0646', slug: 'epilation', sortOrder: 10 },
+  { name: '\u0645\u0627\u0633\u0627\u0698', slug: 'massage', sortOrder: 11 },
+  { name: '\u0627\u0633\u067e\u0627', slug: 'spa', sortOrder: 12 },
+  { name: '\u0622\u0631\u0627\u06cc\u0634 \u062f\u0627\u0626\u0645', slug: 'permanent-makeup', sortOrder: 13 },
+  { name: '\u062a\u062a\u0648', slug: 'tattoo', sortOrder: 14 },
+  { name: '\u0627\u06a9\u0633\u062a\u0646\u0634\u0646 \u0648 \u0628\u0627\u0641\u062a', slug: 'extension-braid', sortOrder: 15 },
+  { name: '\u062e\u062f\u0645\u0627\u062a \u0622\u0642\u0627\u06cc\u0627\u0646', slug: 'mens-services', sortOrder: 16 },
+  { name: '\u062e\u062f\u0645\u0627\u062a \u06a9\u0648\u062f\u06a9', slug: 'kids-services', sortOrder: 17 },
+  { name: '\u062e\u062f\u0645\u0627\u062a \u0639\u0631\u0648\u0633', slug: 'bridal-services', sortOrder: 18 },
+  { name: '\u062e\u062f\u0645\u0627\u062a \u062f\u0627\u0645\u0627\u062f', slug: 'groom-services', sortOrder: 19 },
+];
+
+/**
+ * Optional sample multi-level hierarchy under \u0646\u0627\u062e\u0646 (nails)
+ * to demonstrate unlimited depth: \u0646\u0627\u062e\u0646 \u2192 \u06a9\u0627\u0634\u062a \u2192 \u06a9\u0627\u0634\u062a \u0628\u0627 \u0698\u0644 \u2192 leaf services
+ * Does not limit hierarchy depth elsewhere.
+ */
+const SAMPLE_HIERARCHY = [
   {
-    name: 'مو',
-    slug: 'hair',
+    parentSlug: 'nails',
+    name: '\u06a9\u0627\u0634\u062a',
+    slug: 'nails-extension',
     sortOrder: 1,
     children: [
       {
-        name: 'کوتاهی و اصلاح',
-        slug: 'hair-cut',
+        name: '\u06a9\u0627\u0634\u062a \u0628\u0627 \u0698\u0644',
+        slug: 'nails-gel-extension',
         sortOrder: 1,
         services: [
-          { name: 'کوتاهی مو زنانه', slug: 'haircut-women' },
-          { name: 'کوتاهی مو مردانه', slug: 'haircut-men' },
-          { name: 'اصلاح ابرو', slug: 'brow-shape' },
-        ],
-      },
-      {
-        name: 'رنگ و هایلایت',
-        slug: 'hair-color',
-        sortOrder: 2,
-        services: [
-          { name: 'رنگ مو', slug: 'hair-color-full' },
-          { name: 'هایلایت', slug: 'hair-highlight' },
-          { name: 'بالیاژ', slug: 'hair-balayage' },
-        ],
-      },
-      {
-        name: 'مراقبت مو',
-        slug: 'hair-care',
-        sortOrder: 3,
-        services: [
-          { name: 'کراتین', slug: 'keratin' },
-          { name: 'بوتاکس مو', slug: 'hair-botox' },
-          { name: 'ماساژ و ماسک مو', slug: 'hair-mask' },
+          { name: '\u06a9\u0627\u0634\u062a \u0698\u0644 \u0628\u0644\u0646\u062f', slug: 'nails-gel-long' },
+          { name: '\u06a9\u0627\u0634\u062a \u0698\u0644 \u06a9\u0648\u062a\u0627\u0647', slug: 'nails-gel-short' },
         ],
       },
     ],
-    services: [],
-  },
-  {
-    name: 'ناخن',
-    slug: 'nails',
-    sortOrder: 2,
-    children: [
-      {
-        name: 'مانیکور',
-        slug: 'manicure-cat',
-        sortOrder: 1,
-        services: [
-          { name: 'مانیکور ساده', slug: 'manicure' },
-          { name: 'کاشت ناخن', slug: 'nail-extension' },
-          { name: 'ژل پولیش', slug: 'gel-polish' },
-        ],
-      },
-      {
-        name: 'پدیکور',
-        slug: 'pedicure-cat',
-        sortOrder: 2,
-        services: [
-          { name: 'پدیکور ساده', slug: 'pedicure' },
-          { name: 'پدیکور درمانی', slug: 'pedicure-medical' },
-        ],
-      },
-    ],
-    services: [],
-  },
-  {
-    name: 'پوست',
-    slug: 'skin',
-    sortOrder: 3,
-    children: [
-      {
-        name: 'پاکسازی و مراقبت',
-        slug: 'skin-care',
-        sortOrder: 1,
-        services: [
-          { name: 'پاکسازی پوست', slug: 'facial' },
-          { name: 'فیشیال', slug: 'deep-facial' },
-          { name: 'میکرودرم', slug: 'microderm' },
-        ],
-      },
-      {
-        name: 'زیبایی پوست',
-        slug: 'skin-beauty',
-        sortOrder: 2,
-        services: [
-          { name: 'مزوتراپی', slug: 'mesotherapy' },
-          { name: 'لیفت صورت', slug: 'face-lift-session' },
-        ],
-      },
-    ],
-    services: [],
-  },
-  {
-    name: 'آرایش',
-    slug: 'makeup',
-    sortOrder: 4,
-    children: [
-      {
-        name: 'آرایش صورت',
-        slug: 'face-makeup',
-        sortOrder: 1,
-        services: [
-          { name: 'آرایش روزمره', slug: 'daily-makeup' },
-          { name: 'آرایش مجلسی', slug: 'party-makeup' },
-          { name: 'آرایش عروس', slug: 'bridal-makeup' },
-        ],
-      },
-    ],
-    services: [],
-  },
-  {
-    name: 'ابرو و مژه',
-    slug: 'brow-lash',
-    sortOrder: 5,
-    children: [
-      {
-        name: 'ابرو',
-        slug: 'brow',
-        sortOrder: 1,
-        services: [
-          { name: 'اصلاح ابرو', slug: 'brow-trim' },
-          { name: 'میکروبلیدینگ ابرو', slug: 'microblading' },
-        ],
-      },
-      {
-        name: 'مژه',
-        slug: 'lash',
-        sortOrder: 2,
-        services: [
-          { name: 'اکستنشن مژه', slug: 'lash-extension' },
-          { name: 'لیفت مژه', slug: 'lash-lift' },
-        ],
-      },
-    ],
-    services: [],
   },
 ];
 
@@ -167,32 +79,49 @@ async function upsertService({ name, slug, categoryId }) {
   });
 }
 
+async function seedSampleBranch(node, parentId) {
+  const row = await upsertCategory({
+    name: node.name,
+    slug: node.slug,
+    sortOrder: node.sortOrder ?? 0,
+    parentId,
+  });
+  let serviceCount = 0;
+  for (const s of node.services || []) {
+    await upsertService({ ...s, categoryId: row.id });
+    serviceCount++;
+  }
+  for (const child of node.children || []) {
+    serviceCount += await seedSampleBranch(child, row.id);
+  }
+  return serviceCount;
+}
+
 async function main() {
-  let count = 0;
-  for (const cat of CATALOG) {
-    const parent = await upsertCategory({
+  let serviceCount = 0;
+
+  for (const cat of ROOT_CATEGORIES) {
+    await upsertCategory({
       name: cat.name,
       slug: cat.slug,
       sortOrder: cat.sortOrder,
     });
-    for (const s of cat.services || []) {
-      await upsertService({ ...s, categoryId: parent.id });
-      count++;
-    }
-    for (const child of cat.children || []) {
-      const row = await upsertCategory({
-        name: child.name,
-        slug: child.slug,
-        sortOrder: child.sortOrder,
-        parentId: parent.id,
-      });
-      for (const s of child.services || []) {
-        await upsertService({ ...s, categoryId: row.id });
-        count++;
-      }
-    }
   }
-  console.log(`Catalog seed OK — ${count} services upserted`);
+
+  for (const branch of SAMPLE_HIERARCHY) {
+    const parent = await prisma.serviceCategory.findUnique({
+      where: { slug: branch.parentSlug },
+    });
+    if (!parent) {
+      console.warn(`Parent category ${branch.parentSlug} not found, skip sample`);
+      continue;
+    }
+    serviceCount += await seedSampleBranch(branch, parent.id);
+  }
+
+  console.log(
+    `Catalog seed OK — ${ROOT_CATEGORIES.length} root categories, ${serviceCount} sample services`,
+  );
 }
 
 main()
