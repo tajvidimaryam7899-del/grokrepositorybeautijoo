@@ -16,18 +16,25 @@ export type FavoriteItem = {
   professional?: { id: string; slug: string; title?: string | null; status?: string; user?: { profile?: { displayName?: string | null; avatarUrl?: string | null } | null } | null };
 };
 export type NotificationItem = { id: string; title?: string; body?: string; message?: string; readAt?: string | null; createdAt: string; type?: string };
+export type ServiceAddOnItem = {
+  id: string; name: string; description?: string | null; price: number;
+  extraDurationMin?: number; sortOrder?: number; isActive?: boolean;
+};
 export type ProfessionalServiceItem = {
   id: string; serviceId: string; durationMin: number; price: number; bufferMin?: number; description?: string | null; isActive?: boolean;
-  service?: { id: string; name: string; category?: { name?: string; id?: string } | null };
+  service?: { id: string; name: string; slug?: string; category?: { name?: string; id?: string; slug?: string; parentId?: string | null } | null };
   priceRules?: PriceRuleItem[];
   durationRules?: DurationRuleItem[];
+  addOns?: ServiceAddOnItem[];
+  mediaAssets?: MediaAssetItem[];
 };
 export type PriceRuleItem = { id: string; label: string; price: number; attributes?: Record<string, unknown> | null; sortOrder?: number; isActive?: boolean };
 export type DurationRuleItem = { id: string; label: string; durationMin: number; durationMaxMin?: number | null; attributes?: Record<string, unknown> | null; sortOrder?: number; isActive?: boolean };
 export type MediaAssetItem = { id: string; kind: string; publicUrl: string; mimeType: string; status: string; title?: string | null; sortOrder?: number };
 export type CatalogCategory = {
-  id: string; name: string; slug: string;
-  services?: { id: string; name: string }[];
+  id: string; name: string; slug: string; parentId?: string | null; description?: string | null;
+  sortOrder?: number; isActive?: boolean;
+  services?: { id: string; name: string; slug?: string; description?: string | null }[];
   children?: CatalogCategory[];
 };
 export type LocationItem = { id: string; name: string; address: string; city: string; province?: string | null; latitude?: number | null; longitude?: number | null; isPrimary?: boolean };
@@ -144,11 +151,48 @@ export async function fetchMyServices() {
   const res = await apiClient.get<ProfessionalServiceItem[] | Paginated<ProfessionalServiceItem>>('/professionals/me/services');
   return unwrapList(res as Paginated<ProfessionalServiceItem>);
 }
-export async function upsertMyService(payload: { serviceId: string; durationMin: number; price: number; bufferMin?: number; description?: string }) {
+export async function upsertMyService(payload: { serviceId: string; durationMin: number; price: number; bufferMin?: number; description?: string; isActive?: boolean }) {
   return apiClient.post('/professionals/me/services', payload);
 }
 export async function deactivateMyService(id: string) {
   return apiClient.delete(`/professionals/me/services/${id}`);
+}
+export async function patchMyService(id: string, payload: {
+  durationMin?: number; price?: number; bufferMin?: number; description?: string; isActive?: boolean;
+}) {
+  return apiClient.patch(`/professionals/me/services/${id}`, payload);
+}
+export async function createCategoryNode(payload: {
+  name: string; parentId?: string; slug?: string; description?: string; sortOrder?: number;
+}) {
+  return apiClient.post<CatalogCategory>('/categories', payload);
+}
+export async function createServiceNode(payload: {
+  name: string; categoryId: string; slug?: string; description?: string;
+}) {
+  return apiClient.post<{ id: string; name: string; slug: string; categoryId: string }>('/services', payload);
+}
+export async function fetchMyAddOns(psId: string) {
+  const res = await apiClient.get<ServiceAddOnItem[] | Paginated<ServiceAddOnItem>>(`/professionals/me/services/${psId}/add-ons`);
+  return unwrapList(res as Paginated<ServiceAddOnItem>);
+}
+export async function upsertMyAddOn(psId: string, payload: {
+  id?: string; name: string; description?: string; price: number; extraDurationMin?: number; sortOrder?: number; isActive?: boolean;
+}) {
+  return apiClient.post<ServiceAddOnItem>(`/professionals/me/services/${psId}/add-ons`, payload);
+}
+export async function deactivateMyAddOn(addOnId: string) {
+  return apiClient.delete(`/professionals/me/add-ons/${addOnId}`);
+}
+export async function fetchMyServiceMedia(psId: string) {
+  const list = await apiClient.get<MediaAssetItem[]>(`/professionals/me/services/${psId}/media`);
+  return (list || []).map((a) => ({ ...a, publicUrl: resolveMediaUrl(a.publicUrl) }));
+}
+export async function attachMediaToMyService(psId: string, mediaId: string) {
+  return apiClient.post(`/professionals/me/services/${psId}/media`, { mediaId });
+}
+export async function detachMediaFromMyService(psId: string, mediaId: string) {
+  return apiClient.delete(`/professionals/me/services/${psId}/media/${mediaId}`);
 }
 export async function fetchMyProfessional() {
   const pro = await apiClient.get<OwnProfessional>('/professionals/me');
@@ -231,7 +275,6 @@ export function isAllowedImageFile(file: File): boolean {
   const allowedExt = new Set(['jpg', 'jpeg', 'png', 'webp', 'gif', 'heic', 'heif']);
   if (mime && allowedMime.has(mime)) return true;
   if (ext && allowedExt.has(ext)) return true;
-  // Empty MIME + no/unknown extension: let backend magic-byte sniff decide
   if (!mime) return true;
   return false;
 }
@@ -242,11 +285,11 @@ export async function uploadMyMedia(file: File, kind: string, professionalServic
   const API_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api/v1').replace(/\/$/, '');
   const token = getAccessToken();
 
-  if (!isAllowedImageFile(file)) {
-    throw new ApiError(400, 'فرمت این تصویر پشتیبانی نمی‌شود. فقط JPG، PNG، WEBP، GIF یا HEIC مجاز است.');
+  if (!isAllowedImageFile(file) && !(file.type || '').startsWith('video/')) {
+    throw new ApiError(400, 'فرمت این فایل پشتیبانی نمی‌شود.');
   }
-  if (file.size > 8 * 1024 * 1024) {
-    throw new ApiError(400, 'حجم تصویر بیش از حد مجاز است (حداکثر ۸ مگابایت).');
+  if (file.size > 50 * 1024 * 1024) {
+    throw new ApiError(400, 'حجم فایل بیش از حد مجاز است.');
   }
   if (!token) {
     throw new ApiError(401, 'برای آپلود باید وارد حساب کاربری شوید.');
