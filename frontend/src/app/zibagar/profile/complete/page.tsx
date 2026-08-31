@@ -10,8 +10,9 @@ import { CompletionBar } from '@/components/profile/completion-bar';
 import { ProfileStepper, type WizardStep } from '@/components/profile/stepper';
 import {
   fetchMyProfessional, updateMyProfessional, addMyLocation, setMyWorkingHours,
-  fetchPublicServices, upsertMyService, publishMyProfessional,
+  publishMyProfessional,
   uploadMyMedia, fetchCategories, resolveMediaUrl,
+  type CatalogCategory,
   type OwnProfessional, type ProfileCompletion,
 } from '@/lib/panel-api';
 import { friendlyApiError } from '@/lib/api-errors';
@@ -37,8 +38,6 @@ const WEEK_DAYS = [
   { value: 'thursday', label: 'پنج‌شنبه' },
   { value: 'friday', label: 'جمعه' },
 ];
-
-type CatalogService = { id: string; name: string };
 
 export default function ProfileCompletePage() {
   const { user, loading: authLoading, reload } = useAuth();
@@ -69,10 +68,8 @@ export default function ProfileCompletePage() {
   const [citySearch, setCitySearch] = useState('');
   const [mapSelected, setMapSelected] = useState(false);
   const [cityOptions, setCityOptions] = useState<IranCity[]>([]);
-  const [catalog, setCatalog] = useState<CatalogService[]>([]);
-  const [selectedServiceId, setSelectedServiceId] = useState('');
-  const [svcDuration, setSvcDuration] = useState('60');
-  const [svcPrice, setSvcPrice] = useState('300000');
+  const [rootCategories, setRootCategories] = useState<CatalogCategory[]>([]);
+  const [selectedRootIds, setSelectedRootIds] = useState<string[]>([]);
   const [hourDays, setHourDays] = useState<string[]>(['saturday', 'sunday', 'monday', 'tuesday', 'wednesday', 'thursday']);
   const [hourStart, setHourStart] = useState('10:00');
   const [hourEnd, setHourEnd] = useState('20:00');
@@ -133,21 +130,29 @@ export default function ProfileCompletePage() {
     if (step === 4) {
       fetchCategories()
         .then((cats) => {
-          const out: CatalogService[] = [];
-          for (const c of cats || []) {
-            for (const s of c.services || []) out.push({ id: s.id, name: `${c.name} — ${s.name}` });
-            for (const ch of c.children || []) {
-              for (const s of ch.services || []) out.push({ id: s.id, name: `${c.name} / ${ch.name} — ${s.name}` });
+          const roots = (cats || []).filter((c) => !c.parentId);
+          setRootCategories(roots);
+          try {
+            const raw = localStorage.getItem('beautijoo_wizard_root_categories');
+            if (raw) {
+              const ids = JSON.parse(raw) as string[];
+              if (Array.isArray(ids)) setSelectedRootIds(ids.filter((id) => roots.some((r) => r.id === id)));
             }
+          } catch { /* ignore */ }
+          if (pro?.professionalServices?.length) {
+            const fromServices = new Set<string>();
+            for (const ps of pro.professionalServices) {
+              const cid = (ps as { service?: { category?: { id?: string } } }).service?.category?.id;
+              if (cid) fromServices.add(cid);
+            }
+            const rootIds = new Set(roots.map((r) => r.id));
+            const selected = [...fromServices].filter((id) => rootIds.has(id));
+            if (selected.length) setSelectedRootIds((prev) => Array.from(new Set([...prev, ...selected])));
           }
-          if (out.length) setCatalog(out);
-          else return fetchPublicServices().then((list) => setCatalog((list || []).map((s: CatalogService) => ({ id: s.id, name: s.name }))));
         })
-        .catch(() => {
-          fetchPublicServices().then((list) => setCatalog((list || []).map((s: CatalogService) => ({ id: s.id, name: s.name })))).catch(() => {});
-        });
+        .catch(() => setRootCategories([]));
     }
-  }, [step]);
+  }, [step, pro]);
 
   async function saveBasic() {
     setSaving(true); setError(null); setMsg(null);
@@ -228,19 +233,14 @@ export default function ProfileCompletePage() {
   async function saveService() {
     setSaving(true); setError(null); setMsg(null);
     try {
-      if (!selectedServiceId) {
-        setError('یک تخصص انتخاب کنید');
+      if (!selectedRootIds.length) {
+        setError('حداقل یک دسته خدمات انتخاب کنید');
         return false;
       }
-      const duration = parseInt(svcDuration, 10);
-      const price = parseInt(svcPrice, 10);
-      if (!duration || duration < 5 || price == null || price < 0) {
-        setError('مدت و قیمت معتبر وارد کنید');
-        return false;
-      }
-      await upsertMyService({ serviceId: selectedServiceId, durationMin: duration, price });
-      await load();
-      setMsg('تخصص ذخیره شد');
+      try {
+        localStorage.setItem('beautijoo_wizard_root_categories', JSON.stringify(selectedRootIds));
+      } catch { /* ignore */ }
+      setMsg('دسته‌های انتخاب‌شده ذخیره شد. جزئیات قیمت و نمونه‌کار را در «خدمات من» تکمیل کنید.');
       return true;
     } catch (e) {
       setError(friendlyApiError(e));
@@ -248,6 +248,12 @@ export default function ProfileCompletePage() {
     } finally {
       setSaving(false);
     }
+  }
+
+  function toggleRootCategory(id: string) {
+    setSelectedRootIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
   }
 
   async function saveHours() {
@@ -476,22 +482,36 @@ export default function ProfileCompletePage() {
       )}
       {step === 4 && (
         <Card className="space-y-4">
-          <h2 className="font-semibold">تخصص‌ها و قیمت</h2>
-          <label className="block space-y-1 text-sm">انتخاب خدمت از کاتالوگ
-            <select className="w-full rounded-xl border border-border p-3 text-sm" value={selectedServiceId}
-              onChange={(e) => setSelectedServiceId(e.target.value)}>
-              <option value="">انتخاب کنید</option>
-              {catalog.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </select></label>
-          {!catalog.length && (
-            <p className="text-xs text-coral">لیست خدمات خالی است — پس از Redeploy بک‌اند، کاتالوگ به‌صورت خودکار seed می‌شود.</p>
+          <h2 className="font-semibold">دسته‌های خدمات شما</h2>
+          <p className="text-xs text-gray">
+            چند دسته اصلی را انتخاب کنید. قیمت، زمان و نمونه‌کار را بعداً در صفحه «خدمات من» تنظیم می‌کنید.
+          </p>
+          {!rootCategories.length ? (
+            <p className="text-sm text-gray">در حال بارگذاری دسته‌ها…</p>
+          ) : (
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {rootCategories.map((c) => {
+                const on = selectedRootIds.includes(c.id);
+                return (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => toggleRootCategory(c.id)}
+                    className={`rounded-2xl border px-4 py-3 text-right text-sm transition ${
+                      on
+                        ? 'border-coral bg-coral text-white'
+                        : 'border-border bg-white text-foreground hover:border-coral/40'
+                    }`}
+                  >
+                    <span className="font-medium">{on ? '✓ ' : ''}{c.name}</span>
+                  </button>
+                );
+              })}
+            </div>
           )}
-          <div className="grid grid-cols-2 gap-3">
-            <label className="block space-y-1 text-sm">مدت (دقیقه)
-              <Input value={svcDuration} onChange={(e) => setSvcDuration(e.target.value)} /></label>
-            <label className="block space-y-1 text-sm">قیمت (تومان)
-              <Input value={svcPrice} onChange={(e) => setSvcPrice(e.target.value)} /></label>
-          </div>
+          {selectedRootIds.length > 0 && (
+            <p className="text-xs text-blue-dark">{selectedRootIds.length} دسته انتخاب شده</p>
+          )}
         </Card>
       )}
       {step === 5 && (
