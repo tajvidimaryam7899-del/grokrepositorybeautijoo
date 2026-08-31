@@ -58,13 +58,42 @@ function unwrapList<T>(res: Paginated<T> | T[]): T[] {
   return res.items ?? res.data ?? [];
 }
 
-/** Resolve /uploads/... relative URLs against API origin (not /api/v1). */
+/**
+ * Normalize media URLs for <img src>.
+ * Absolute http(s) → as-is (Object Storage). Relative /uploads → API origin.
+ * Optional NEXT_PUBLIC_MEDIA_URL for bare storage keys.
+ */
 export function resolveMediaUrl(url: string | null | undefined): string {
   if (!url) return '';
-  if (/^https?:\/\//i.test(url)) return url;
+  const trimmed = String(url).trim();
+  if (!trimmed) return '';
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  if (trimmed.startsWith('//')) return `https:${trimmed}`;
+  const mediaBase = (process.env.NEXT_PUBLIC_MEDIA_URL || '').trim().replace(/\/$/, '');
+  if (mediaBase && !trimmed.startsWith('/')) {
+    return `${mediaBase}/${trimmed.replace(/^\/+/, '')}`;
+  }
   const api = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api/v1').replace(/\/$/, '');
   const origin = api.replace(/\/api\/v1$/i, '');
-  return `${origin}${url.startsWith('/') ? url : `/${url}`}`;
+  const path = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+  return `${origin}${path}`;
+}
+
+/** Apply resolveMediaUrl to avatar / cover / logo on a professional payload. */
+export function withResolvedMediaUrls<T extends OwnProfessional>(pro: T): T {
+  if (!pro) return pro;
+  const profile = pro.user?.profile
+    ? {
+        ...pro.user.profile,
+        avatarUrl: resolveMediaUrl(pro.user.profile.avatarUrl) || pro.user.profile.avatarUrl || null,
+      }
+    : pro.user?.profile;
+  return {
+    ...pro,
+    coverImageUrl: resolveMediaUrl(pro.coverImageUrl) || pro.coverImageUrl || null,
+    logoUrl: resolveMediaUrl(pro.logoUrl) || pro.logoUrl || null,
+    user: pro.user ? { ...pro.user, profile: profile ?? pro.user.profile } : pro.user,
+  };
 }
 
 export async function fetchMyBookings(page = 1, limit = 20) {
@@ -88,15 +117,10 @@ export async function fetchFavorites() {
 export async function removeFavorite(professionalId: string) {
   return apiClient.delete(`/favorites/${professionalId}`);
 }
-export async function createReview(payload: { bookingId: string; rating: number; comment?: string }) {
-  return apiClient.post('/reviews', payload);
-}
-export async function fetchNotifications(page = 1) {
-  const res = await apiClient.get<NotificationItem[] | Paginated<NotificationItem>>(`/notifications?page=${page}`);
-  return { items: unwrapList(res as Paginated<NotificationItem>), raw: res };
-}
-export async function fetchUnreadCount() {
-  return apiClient.get<{ count: number }>('/notifications/unread-count');
+
+export async function fetchNotifications() {
+  const res = await apiClient.get<NotificationItem[] | Paginated<NotificationItem>>('/notifications');
+  return unwrapList(res as Paginated<NotificationItem>);
 }
 export async function markNotificationRead(id: string) {
   return apiClient.patch(`/notifications/${id}/read`);
@@ -115,13 +139,15 @@ export async function deactivateMyService(id: string) {
   return apiClient.delete(`/professionals/me/services/${id}`);
 }
 export async function fetchMyProfessional() {
-  return apiClient.get<OwnProfessional>('/professionals/me');
+  const pro = await apiClient.get<OwnProfessional>('/professionals/me');
+  return withResolvedMediaUrls(pro);
 }
 export async function fetchMyCompletion() {
   return apiClient.get<ProfileCompletion>('/professionals/me/completion');
 }
 export async function fetchMyPreview() {
-  return apiClient.get<OwnProfessional>('/professionals/me/preview');
+  const pro = await apiClient.get<OwnProfessional>('/professionals/me/preview');
+  return withResolvedMediaUrls(pro);
 }
 export async function updateMyProfessional(payload: Record<string, unknown>) {
   return apiClient.patch<OwnProfessional>('/professionals/me', payload);
@@ -147,57 +173,21 @@ export async function addMyLocation(payload: {
 }) {
   return apiClient.post('/professionals/me/locations', payload);
 }
-export async function updateMyLocation(id: string, payload: {
-  name?: string;
-  address?: string;
-  city: string;
-  province?: string;
-  latitude?: number;
-  longitude?: number;
-  isPrimary?: boolean;
-}) {
-  return apiClient.patch(`/professionals/me/locations/${id}`, payload);
+export async function removeMyLocation(locationId: string) {
+  return apiClient.delete(`/professionals/me/locations/${locationId}`);
 }
 export async function fetchMyWorkingHours() {
   const res = await apiClient.get<WorkingHourItem[] | Paginated<WorkingHourItem>>('/professionals/me/working-hours');
   return unwrapList(res as Paginated<WorkingHourItem>);
 }
-export async function setMyWorkingHours(payload: { dayOfWeek: string; startTime: string; endTime: string; breaks?: { startTime: string; endTime: string }[] }) {
-  return apiClient.post('/professionals/me/working-hours', payload);
+export async function setMyWorkingHours(hours: WorkingHourItem[]) {
+  return apiClient.put('/professionals/me/working-hours', { hours });
 }
-export async function addTimeOff(payload: { startAt: string; endAt: string; reason?: string }) {
-  return apiClient.post('/professionals/me/time-off', payload);
-}
-export async function fetchPublicServices(category?: string) {
-  const q = category ? `?category=${encodeURIComponent(category)}` : '';
-  return apiClient.get<{ id: string; name: string; categoryId?: string }[]>(`/services${q}`);
-}
-export async function fetchAdminStats() {
-  return apiClient.get<AdminStats>('/admin/stats');
-}
-export async function fetchAdminUsers(page = 1, limit = 20) {
-  const res = await apiClient.get<Paginated<AdminUser> | AdminUser[]>(`/admin/users?page=${page}&limit=${limit}`);
-  return { items: unwrapList(res), raw: res };
-}
-export async function fetchAdminProfessionals(page = 1, limit = 20, status?: string) {
-  const qs = new URLSearchParams({ page: String(page), limit: String(limit) });
-  if (status) qs.set('status', status);
-  const res = await apiClient.get<Paginated<AdminProfessional> | AdminProfessional[]>(`/admin/professionals?${qs}`);
-  return { items: unwrapList(res), raw: res };
-}
-export async function setProfessionalStatus(id: string, status: string) {
-  return apiClient.patch(`/admin/professionals/${id}/status`, { status });
-}
-export async function fetchAdminBookings(page = 1, limit = 20) {
-  const res = await apiClient.get<Paginated<BookingListItem> | BookingListItem[]>(`/admin/bookings?page=${page}&limit=${limit}`);
-  return { items: unwrapList(res), raw: res };
-}
-export async function fetchAuditLogs(page = 1, limit = 50) {
-  const res = await apiClient.get<Paginated<AuditLogItem> | AuditLogItem[]>(`/admin/audit-logs?page=${page}&limit=${limit}`);
-  return { items: unwrapList(res), raw: res };
+export async function fetchCategories() {
+  const res = await apiClient.get<CatalogCategory[] | Paginated<CatalogCategory>>('/services/categories');
+  return unwrapList(res as Paginated<CatalogCategory>);
 }
 
-// ── Media ─────────────────────────────────────────────────────
 export async function uploadMyMedia(file: File, kind: string, professionalServiceId?: string) {
   const { getAccessToken } = await import('./auth-storage');
   const { ApiError } = await import('./api');
@@ -259,25 +249,42 @@ export async function publishMyMedia(ids: string[]) {
   return apiClient.post('/professionals/me/media/publish', { ids });
 }
 
-export async function fetchCategories() {
-  return apiClient.get<CatalogCategory[]>('/categories');
-}
-
 export async function fetchMyPriceRules(psId: string) {
-  return apiClient.get<PriceRuleItem[]>(`/professionals/me/services/${psId}/price-rules`);
+  const res = await apiClient.get<PriceRuleItem[] | Paginated<PriceRuleItem>>(`/professionals/me/services/${psId}/price-rules`);
+  return unwrapList(res as Paginated<PriceRuleItem>);
 }
-export async function upsertMyPriceRule(psId: string, payload: { id?: string; label: string; price: number; attributes?: Record<string, unknown>; sortOrder?: number }) {
-  return apiClient.post<PriceRuleItem>(`/professionals/me/services/${psId}/price-rules`, payload);
+export async function upsertMyPriceRule(psId: string, payload: Partial<PriceRuleItem> & { label: string; price: number }) {
+  return apiClient.post(`/professionals/me/services/${psId}/price-rules`, payload);
 }
-export async function deleteMyPriceRule(id: string) {
-  return apiClient.delete(`/professionals/me/price-rules/${id}`);
+export async function deleteMyPriceRule(psId: string, ruleId: string) {
+  return apiClient.delete(`/professionals/me/services/${psId}/price-rules/${ruleId}`);
 }
 export async function fetchMyDurationRules(psId: string) {
-  return apiClient.get<DurationRuleItem[]>(`/professionals/me/services/${psId}/duration-rules`);
+  const res = await apiClient.get<DurationRuleItem[] | Paginated<DurationRuleItem>>(`/professionals/me/services/${psId}/duration-rules`);
+  return unwrapList(res as Paginated<DurationRuleItem>);
 }
-export async function upsertMyDurationRule(psId: string, payload: { id?: string; label: string; durationMin: number; durationMaxMin?: number; attributes?: Record<string, unknown>; sortOrder?: number }) {
-  return apiClient.post<DurationRuleItem>(`/professionals/me/services/${psId}/duration-rules`, payload);
+export async function upsertMyDurationRule(psId: string, payload: Partial<DurationRuleItem> & { label: string; durationMin: number }) {
+  return apiClient.post(`/professionals/me/services/${psId}/duration-rules`, payload);
 }
-export async function deleteMyDurationRule(id: string) {
-  return apiClient.delete(`/professionals/me/duration-rules/${id}`);
+export async function deleteMyDurationRule(psId: string, ruleId: string) {
+  return apiClient.delete(`/professionals/me/services/${psId}/duration-rules/${ruleId}`);
+}
+
+export async function fetchAdminStats() {
+  return apiClient.get<AdminStats>('/admin/stats');
+}
+export async function fetchAdminUsers() {
+  const res = await apiClient.get<AdminUser[] | Paginated<AdminUser>>('/admin/users');
+  return unwrapList(res as Paginated<AdminUser>);
+}
+export async function fetchAdminProfessionals() {
+  const res = await apiClient.get<AdminProfessional[] | Paginated<AdminProfessional>>('/admin/professionals');
+  return unwrapList(res as Paginated<AdminProfessional>);
+}
+export async function setProfessionalStatus(id: string, status: string) {
+  return apiClient.patch(`/admin/professionals/${id}/status`, { status });
+}
+export async function fetchAuditLogs() {
+  const res = await apiClient.get<AuditLogItem[] | Paginated<AuditLogItem>>('/admin/audit');
+  return unwrapList(res as Paginated<AuditLogItem>);
 }
