@@ -23,17 +23,12 @@ import { StorageProvider } from './storage.provider';
  *   forcePathStyle: true
  *   credentials: Access Key + Secret Key of the bucket
  *
- * AWS SDK JS v3 (≥ ~3.729) sends flexible checksum headers by default;
- * Liara rejects them. We force requestChecksumCalculation /
- * responseChecksumValidation to WHEN_REQUIRED and never invent public hosts.
+ * Public object URLs (public buckets):
+ *   Preferred: S3_PUBLIC_URL (custom domain e.g. https://media.beautijoo.ir)
+ *   Fallback: {S3_ENDPOINT}/{S3_BUCKET}/{key}
+ *     e.g. https://storage.iran.liara.site/beautijoo-media/professionals/...
  *
- * Required env (set only in Liara panel — never commit secrets):
- *   STORAGE_PROVIDER=s3
- *   S3_ENDPOINT, S3_ACCESS_KEY, S3_SECRET_KEY, S3_BUCKET, S3_PUBLIC_URL
- *
- * S3_PUBLIC_URL must be a real public base after binding a domain to the bucket
- * (e.g. https://media.beautijoo.com). Do not use *.storage.iran.liara.site —
- * Liara documents those hosts as panel preview only, not public delivery.
+ * AWS SDK JS v3 flexible checksums are disabled (WHEN_REQUIRED) for Liara.
  */
 @Injectable()
 export class S3StorageProvider implements StorageProvider, OnModuleInit {
@@ -44,9 +39,10 @@ export class S3StorageProvider implements StorageProvider, OnModuleInit {
   private readonly forcePathStyle: boolean;
   private readonly endpointHost: string;
   private readonly region: string;
+  private readonly endpoint: string;
 
   constructor(private readonly config: ConfigService) {
-    const endpoint = this.cleanEndpoint(
+    this.endpoint = this.cleanEndpoint(
       process.env.S3_ENDPOINT || config.get<string>('s3Endpoint') || '',
     );
     this.region = (
@@ -79,18 +75,17 @@ export class S3StorageProvider implements StorageProvider, OnModuleInit {
       .toLowerCase();
     this.forcePathStyle = fpsRaw !== 'false' && fpsRaw !== '0';
 
-    this.endpointHost = this.safeHost(endpoint);
+    this.endpointHost = this.safeHost(this.endpoint);
 
-    if (!endpoint || !accessKeyId || !secretAccessKey || !this.bucket) {
+    if (!this.endpoint || !accessKeyId || !secretAccessKey || !this.bucket) {
       this.logger.error(
         'S3 config incomplete: need S3_ENDPOINT, S3_ACCESS_KEY, S3_SECRET_KEY, S3_BUCKET (secrets not logged).',
       );
     }
 
-    // Match official Liara sample + disable flexible checksums (Liara rejects them).
     this.client = new S3Client({
       region: this.region,
-      endpoint: endpoint || undefined,
+      endpoint: this.endpoint || undefined,
       forcePathStyle: this.forcePathStyle,
       credentials:
         accessKeyId && secretAccessKey
@@ -112,25 +107,25 @@ export class S3StorageProvider implements StorageProvider, OnModuleInit {
       .replace(/\/$/, '');
 
     if (!this.publicBase) {
-      this.logger.error(
-        'S3_PUBLIC_URL is required. Bind a custom domain to the bucket (e.g. media.beautijoo.com) then set S3_PUBLIC_URL=https://media.beautijoo.com. ' +
-          'Do not invent *.storage.iran.liara.site URLs.',
+      this.logger.warn(
+        'S3_PUBLIC_URL not set — getPublicUrl will use path-style {S3_ENDPOINT}/{S3_BUCKET}/{key} ' +
+          '(works for public Liara buckets). Prefer binding media.beautijoo.ir and setting S3_PUBLIC_URL.',
       );
     } else if (
       /\.storage\.iran\.liara\.(site|space)$/i.test(
         this.publicBase.replace(/^https?:\/\//, '').split('/')[0] || '',
       )
     ) {
-      this.logger.warn(
-        'S3_PUBLIC_URL looks like a Liara default storage host. Liara states those hosts are for panel preview only; ' +
-          'bind a real domain (e.g. media.beautijoo.com) to the bucket for production public URLs.',
+      this.logger.log(
+        'S3_PUBLIC_URL uses Liara storage host. Ensure the bucket is public. ' +
+          'Optional: bind media.beautijoo.ir for a custom domain.',
       );
     }
 
     this.logger.log(
       `S3 ready bucket=${this.bucket || '(empty)'} endpointHost=${this.endpointHost || '(empty)'} ` +
         `forcePathStyle=${this.forcePathStyle} region=${this.region} ` +
-        `publicBase=${this.publicBase || '(MISSING)'} checksums=WHEN_REQUIRED ` +
+        `publicBase=${this.publicBase || '(path-style fallback)'} checksums=WHEN_REQUIRED ` +
         `hasAccessKey=${Boolean(accessKeyId)} hasSecret=${Boolean(secretAccessKey)}`,
     );
   }
@@ -147,7 +142,6 @@ export class S3StorageProvider implements StorageProvider, OnModuleInit {
     }
   }
 
-  /** Best-effort removal of flexible checksum middleware (name varies by SDK version). */
   private stripChecksumMiddleware(client: S3Client): void {
     try {
       const stack = (client as unknown as { middlewareStack?: { remove?: (n: string) => void } })
@@ -157,7 +151,7 @@ export class S3StorageProvider implements StorageProvider, OnModuleInit {
         try {
           stack.remove(name);
         } catch {
-          /* middleware may not exist in this build */
+          /* middleware may not exist */
         }
       }
     } catch {
@@ -165,7 +159,6 @@ export class S3StorageProvider implements StorageProvider, OnModuleInit {
     }
   }
 
-  /** Safe diagnostic fields only — never log secrets or full request bodies. */
   private describeError(err: unknown): string {
     if (!err || typeof err !== 'object') return String(err);
     const e = err as Record<string, unknown> & {
@@ -214,7 +207,7 @@ export class S3StorageProvider implements StorageProvider, OnModuleInit {
       return 'احراز هویت S3 ناموفق بود (SignatureDoesNotMatch). Access Key و Secret Key و Endpoint را در پنل Liara بررسی کنید.';
     }
     if (code.includes('accessdenied') || msg.includes('access denied')) {
-      return 'دسترسی به باکت رد شد (AccessDenied). مجوزهای کلید (PUT/READ/DELETE) و نام باکت را بررسی کنید.';
+      return 'دسترسی به باکت رد شد (AccessDenied). مجوزهای کلید و نام باکت را بررسی کنید.';
     }
     if (code.includes('nosuchbucket') || msg.includes('no such bucket')) {
       return 'باکت یافت نشد (NoSuchBucket). نام S3_BUCKET را با نام باکت در پنل Liara یکسان کنید.';
@@ -223,14 +216,14 @@ export class S3StorageProvider implements StorageProvider, OnModuleInit {
       code.includes('invalidaccesskeyid') ||
       msg.includes('invalid access key')
     ) {
-      return 'Access Key نامعتبر است. کلید جدید از پنل Object Storage بسازید و در متغیرهای محیطی ست کنید.';
+      return 'Access Key نامعتبر است. کلید جدید از پنل Object Storage بسازید.';
     }
     if (
       code.includes('permanentredirect') ||
       code.includes('authorizationheadermalformed') ||
       (msg.includes('endpoint') && msg.includes('region'))
     ) {
-      return 'Endpoint یا Region نادرست است. مقدار رسمی از بخش «دسترسی با SDK» پنل Liara را برای S3_ENDPOINT استفاده کنید (معمولاً https://storage.iran.liara.site).';
+      return 'Endpoint یا Region نادرست است. مقدار رسمی از بخش «دسترسی با SDK» را برای S3_ENDPOINT استفاده کنید.';
     }
     if (
       code.includes('xamzcontentsha256mismatch') ||
@@ -238,14 +231,14 @@ export class S3StorageProvider implements StorageProvider, OnModuleInit {
       msg.includes('checksum') ||
       msg.includes('content-md5')
     ) {
-      return 'خطای checksum/digest با Object Storage. نسخهٔ کلاینت S3 را بررسی کنید.';
+      return 'خطای checksum/digest با Object Storage.';
     }
     if (
       code.includes('networkingerror') ||
       msg.includes('econnrefused') ||
       msg.includes('enotfound')
     ) {
-      return 'اتصال به Endpoint فضای ذخیره‌سازی برقرار نشد. S3_ENDPOINT و شبکهٔ سرور را بررسی کنید.';
+      return 'اتصال به Endpoint فضای ذخیره‌سازی برقرار نشد.';
     }
     return 'ذخیره‌سازی فایل در Object Storage ناموفق بود. تنظیمات S3 را بررسی کنید.';
   }
@@ -277,7 +270,6 @@ export class S3StorageProvider implements StorageProvider, OnModuleInit {
     }
 
     const mime = contentType || 'application/octet-stream';
-    // Official Liara sample uses Body: buffer without ContentLength.
     const body = Uint8Array.from(buffer);
 
     try {
@@ -318,12 +310,17 @@ export class S3StorageProvider implements StorageProvider, OnModuleInit {
 
   getPublicUrl(key: string): string {
     const safeKey = key.replace(/^\/+/, '');
-    if (!this.publicBase) {
-      throw new InternalServerErrorException(
-        'S3_PUBLIC_URL تنظیم نشده است. دامنه عمومی متصل به باکت (مثلاً https://media.beautijoo.com) را تنظیم کنید.',
-      );
+    // Preferred: custom domain or explicit public base (S3_PUBLIC_URL).
+    if (this.publicBase) {
+      return `${this.publicBase}/${safeKey}`;
     }
-    return `${this.publicBase}/${safeKey}`;
+    // Liara public-bucket permanent URL: {endpoint}/{bucket}/{key}
+    if (this.endpoint && this.bucket) {
+      return `${this.endpoint}/${this.bucket}/${safeKey}`;
+    }
+    throw new InternalServerErrorException(
+      'S3_PUBLIC_URL یا (S3_ENDPOINT + S3_BUCKET) برای ساخت URL عمومی تنظیم نشده است.',
+    );
   }
 
   async exists(key: string): Promise<boolean> {
