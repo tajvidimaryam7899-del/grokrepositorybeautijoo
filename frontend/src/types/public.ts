@@ -25,6 +25,24 @@ export type ServiceSnippet = {
   } | null;
 };
 
+export type ProfessionalServiceMedia = {
+  id: string;
+  kind: string;
+  publicUrl: string;
+  mimeType: string;
+  status?: string;
+  sortOrder?: number;
+  title?: string | null;
+};
+
+export type ProfessionalServiceAddOn = {
+  id: string;
+  name: string;
+  description?: string | null;
+  price: number;
+  extraDurationMin?: number;
+};
+
 export type ProfessionalServiceItem = {
   id: string;
   durationMin: number;
@@ -33,6 +51,8 @@ export type ProfessionalServiceItem = {
   description?: string | null;
   isActive?: boolean;
   service: ServiceSnippet;
+  mediaAssets?: ProfessionalServiceMedia[];
+  addOns?: ProfessionalServiceAddOn[];
 };
 
 export type ProfessionalListItem = {

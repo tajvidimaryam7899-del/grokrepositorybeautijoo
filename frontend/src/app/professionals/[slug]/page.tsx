@@ -6,7 +6,8 @@ import {
   PublicApiError,
 } from '@/lib/public-api';
 import { absoluteUrl, professionalJsonLd, siteName } from '@/lib/seo';
-import { formatPrice } from '@/lib/utils';
+import { ServiceOfferCard } from '@/components/professionals/service-offer-card';
+import type { ProfessionalServiceItem } from '@/types/public';
 
 type Props = {
   params: Promise<{ slug: string }>;
@@ -140,25 +141,12 @@ export default async function ProfessionalProfilePage({ params }: Props) {
               pro.professionalServices.length === 0) && (
               <p className="mt-3 text-sm text-gray">خدمتی ثبت نشده است.</p>
             )}
-            <ul className="mt-4 divide-y divide-border">
+            <ul className="mt-4 space-y-3">
               {pro.professionalServices?.map((ps) => (
-                <li
+                <ServiceOfferCard
                   key={ps.id}
-                  className="flex flex-wrap items-center justify-between gap-2 py-3"
-                >
-                  <div>
-                    <p className="font-medium">{ps.service.name}</p>
-                    <p className="text-xs text-gray">
-                      {ps.durationMin} دقیقه
-                      {ps.service.category?.name
-                        ? ` · ${ps.service.category.name}`
-                        : ''}
-                    </p>
-                  </div>
-                  <p className="font-bold text-coral">
-                    {formatPrice(ps.price)}
-                  </p>
-                </li>
+                  ps={ps as ProfessionalServiceItem}
+                />
               ))}
             </ul>
           </section>
