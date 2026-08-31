@@ -118,12 +118,24 @@ export async function removeFavorite(professionalId: string) {
   return apiClient.delete(`/favorites/${professionalId}`);
 }
 
-export async function fetchNotifications() {
-  const res = await apiClient.get<NotificationItem[] | Paginated<NotificationItem>>('/notifications');
-  return unwrapList(res as Paginated<NotificationItem>);
+export async function fetchNotifications(page = 1) {
+  const res = await apiClient.get<NotificationItem[] | Paginated<NotificationItem>>(
+    `/notifications?page=${page}`,
+  );
+  return { items: unwrapList(res as Paginated<NotificationItem>), raw: res };
+}
+export async function fetchUnreadCount() {
+  return apiClient.get<{ count: number }>('/notifications/unread-count');
 }
 export async function markNotificationRead(id: string) {
   return apiClient.patch(`/notifications/${id}/read`);
+}
+export async function createReview(payload: {
+  bookingId: string;
+  rating: number;
+  comment?: string;
+}) {
+  return apiClient.post('/reviews', payload);
 }
 export async function respondBooking(id: string, action: 'confirm' | 'reject' | 'cancel' | 'complete', reason?: string) {
   return apiClient.patch(`/bookings/${id}/${action}`, reason ? { reason } : undefined);
@@ -180,12 +192,31 @@ export async function fetchMyWorkingHours() {
   const res = await apiClient.get<WorkingHourItem[] | Paginated<WorkingHourItem>>('/professionals/me/working-hours');
   return unwrapList(res as Paginated<WorkingHourItem>);
 }
-export async function setMyWorkingHours(hours: WorkingHourItem[]) {
-  return apiClient.put('/professionals/me/working-hours', { hours });
+/** Backend accepts a single WorkingHourDto via POST /professionals/me/working-hours */
+export async function setMyWorkingHours(hour: WorkingHourItem) {
+  return apiClient.post('/professionals/me/working-hours', {
+    dayOfWeek: hour.dayOfWeek,
+    startTime: hour.startTime,
+    endTime: hour.endTime,
+    ...(hour.breaks ? { breaks: hour.breaks } : {}),
+  });
+}
+export async function addTimeOff(payload: {
+  startAt: string;
+  endAt: string;
+  reason?: string;
+}) {
+  return apiClient.post('/professionals/me/time-off', payload);
 }
 export async function fetchCategories() {
-  const res = await apiClient.get<CatalogCategory[] | Paginated<CatalogCategory>>('/services/categories');
+  const res = await apiClient.get<CatalogCategory[] | Paginated<CatalogCategory>>('/categories');
   return unwrapList(res as Paginated<CatalogCategory>);
+}
+export type PublicServiceItem = { id: string; name: string; categoryId?: string; slug?: string };
+export async function fetchPublicServices(category?: string) {
+  const q = category ? `?category=${encodeURIComponent(category)}` : '';
+  const res = await apiClient.get<PublicServiceItem[] | Paginated<PublicServiceItem>>(`/services${q}`);
+  return unwrapList(res as Paginated<PublicServiceItem>);
 }
 
 /** Client-side image allowlist: MIME and/or extension (mobile often sends empty type). */
@@ -289,18 +320,30 @@ export async function deleteMyDurationRule(psId: string, ruleId: string) {
 export async function fetchAdminStats() {
   return apiClient.get<AdminStats>('/admin/stats');
 }
-export async function fetchAdminUsers() {
-  const res = await apiClient.get<AdminUser[] | Paginated<AdminUser>>('/admin/users');
-  return unwrapList(res as Paginated<AdminUser>);
+export async function fetchAdminUsers(page = 1, limit = 20) {
+  const res = await apiClient.get<AdminUser[] | Paginated<AdminUser>>(
+    `/admin/users?page=${page}&limit=${limit}`,
+  );
+  return { items: unwrapList(res as Paginated<AdminUser>), raw: res };
 }
-export async function fetchAdminProfessionals() {
-  const res = await apiClient.get<AdminProfessional[] | Paginated<AdminProfessional>>('/admin/professionals');
-  return unwrapList(res as Paginated<AdminProfessional>);
+export async function fetchAdminProfessionals(page = 1, limit = 20) {
+  const res = await apiClient.get<AdminProfessional[] | Paginated<AdminProfessional>>(
+    `/admin/professionals?page=${page}&limit=${limit}`,
+  );
+  return { items: unwrapList(res as Paginated<AdminProfessional>), raw: res };
+}
+export async function fetchAdminBookings(page = 1, limit = 20) {
+  const res = await apiClient.get<BookingListItem[] | Paginated<BookingListItem>>(
+    `/admin/bookings?page=${page}&limit=${limit}`,
+  );
+  return { items: unwrapList(res as Paginated<BookingListItem>), raw: res };
 }
 export async function setProfessionalStatus(id: string, status: string) {
   return apiClient.patch(`/admin/professionals/${id}/status`, { status });
 }
-export async function fetchAuditLogs() {
-  const res = await apiClient.get<AuditLogItem[] | Paginated<AuditLogItem>>('/admin/audit');
-  return unwrapList(res as Paginated<AuditLogItem>);
+export async function fetchAuditLogs(page = 1, limit = 50) {
+  const res = await apiClient.get<AuditLogItem[] | Paginated<AuditLogItem>>(
+    `/admin/audit-logs?page=${page}&limit=${limit}`,
+  );
+  return { items: unwrapList(res as Paginated<AuditLogItem>), raw: res };
 }
