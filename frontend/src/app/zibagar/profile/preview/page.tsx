@@ -5,7 +5,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { PanelLoading, PanelError } from '@/components/panel/state-blocks';
-import { fetchMyPreview, type OwnProfessional } from '@/lib/panel-api';
+import { fetchMyPreview, resolveMediaUrl, type OwnProfessional } from '@/lib/panel-api';
 import { friendlyApiError } from '@/lib/api-errors';
 import { formatPrice } from '@/lib/utils';
 
@@ -42,8 +42,8 @@ export default function ProfilePreviewPage() {
     [pro.user?.profile?.firstName, pro.user?.profile?.lastName].filter(Boolean).join(' ') ||
     pro.title;
   const city = pro.locations?.[0]?.location?.city;
-  const avatar = pro.user?.profile?.avatarUrl;
-  const cover = pro.coverImageUrl;
+  const avatar = resolveMediaUrl(pro.user?.profile?.avatarUrl);
+  const cover = resolveMediaUrl(pro.coverImageUrl);
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
