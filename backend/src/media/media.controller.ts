@@ -19,11 +19,20 @@ import { MediaService } from './media.service';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 
-const ALLOWED_MIME = new Set([
+/** Broad accept at multer; MediaService sniffs magic bytes. */
+const MULTER_ACCEPT = new Set([
   'image/jpeg',
+  'image/jpg',
+  'image/pjpeg',
   'image/png',
   'image/webp',
   'image/gif',
+  'image/heic',
+  'image/heif',
+  'image/heic-sequence',
+  'image/heif-sequence',
+  'application/octet-stream',
+  '',
   'video/mp4',
   'video/webm',
   'video/quicktime',
@@ -64,10 +73,11 @@ export class MediaController {
         if (!file) {
           return cb(new BadRequestException('فایل ارسال نشده است') as unknown as Error, false);
         }
-        if (!ALLOWED_MIME.has(file.mimetype)) {
+        const mime = (file.mimetype || '').toLowerCase().trim();
+        if (mime && !MULTER_ACCEPT.has(mime) && !mime.startsWith('image/')) {
           return cb(
             new BadRequestException(
-              'فرمت این فایل پشتیبانی نمی‌شود. فقط JPG، PNG، WEBP، GIF یا ویدیوهای MP4/WEBM مجاز است.',
+              'فرمت این فایل پشتیبانی نمی‌شود. فقط JPG، PNG، WEBP، GIF یا HEIC مجاز است.',
             ) as unknown as Error,
             false,
           );
@@ -103,7 +113,7 @@ export class MediaController {
     }
 
     this.logger.log(
-      `upload user=${userId} kind=${normalizedKind} mime=${file.mimetype} size=${file.size}`,
+      `upload user=${userId} kind=${normalizedKind} mime=${file.mimetype || '(empty)'} size=${file.size}`,
     );
 
     try {
