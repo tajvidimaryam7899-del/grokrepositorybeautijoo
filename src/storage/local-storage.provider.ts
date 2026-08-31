@@ -14,9 +14,6 @@ import { existsSync, mkdirSync, accessSync, constants } from 'fs';
  * Local filesystem storage.
  * Suitable for development and for production only when a persistent volume
  * is mounted and STORAGE_LOCAL_PATH points at that mount.
- *
- * Without a volume (ephemeral container disk), files disappear on redeploy/restart
- * and some hosts make parts of the FS read-only — prefer S3/object storage in prod.
  */
 @Injectable()
 export class LocalStorageProvider implements StorageProvider, OnModuleInit {
@@ -76,7 +73,6 @@ export class LocalStorageProvider implements StorageProvider, OnModuleInit {
     const safeKey = key.replace(/^\/+/, '').replace(/\.\./g, '');
     const full = path.join(this.basePath, safeKey);
 
-    // Prevent path escape outside basePath
     if (!full.startsWith(this.basePath)) {
       throw new InternalServerErrorException('مسیر ذخیره‌سازی نامعتبر است.');
     }
@@ -126,12 +122,35 @@ export class LocalStorageProvider implements StorageProvider, OnModuleInit {
   }
 
   getPublicUrl(key: string): string {
-    const rel = `/uploads/${key.replace(/^\/+/, '')}`;
-    if (this.publicBase) return `${this.publicBase}${rel}`;
-    return rel;
+    const safeKey = key.replace(/^\/+/, '');
+    if (this.publicBase) {
+      return `${this.publicBase}/api/v1/files/${safeKey}`;
+    }
+    return `/api/v1/files/${safeKey}`;
   }
 
-  /** Exposed for diagnostics (not part of StorageProvider interface). */
+  async download(key: string): Promise<{ buffer: Buffer; contentType: string } | null> {
+    const safeKey = key.replace(/^\/+/, '').replace(/\.\./g, '');
+    const full = path.join(this.basePath, safeKey);
+    if (!full.startsWith(this.basePath)) return null;
+    try {
+      const buffer = await fs.readFile(full);
+      const lower = safeKey.toLowerCase();
+      const contentType = lower.endsWith('.png')
+        ? 'image/png'
+        : lower.endsWith('.webp')
+          ? 'image/webp'
+          : lower.endsWith('.gif')
+            ? 'image/gif'
+            : lower.endsWith('.mp4')
+              ? 'video/mp4'
+              : 'image/jpeg';
+      return { buffer, contentType };
+    } catch {
+      return null;
+    }
+  }
+
   getBasePath(): string {
     return this.basePath;
   }

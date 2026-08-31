@@ -9,6 +9,11 @@ export interface StorageProvider {
   upload(key: string, buffer: Buffer, contentType: string): Promise<string>;
   /** Best-effort delete; missing keys are ignored. */
   delete(key: string): Promise<void>;
-  /** Absolute or origin-relative URL the frontend can load. */
+  /**
+   * Absolute URL the frontend can load in <img src>.
+   * Prefer CDN / S3_PUBLIC_URL; otherwise API-relative files proxy.
+   */
   getPublicUrl(key: string): string;
+  /** Read object for proxying (optional for providers). */
+  download?(key: string): Promise<{ buffer: Buffer; contentType: string } | null>;
 }
