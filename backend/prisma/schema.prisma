@@ -331,9 +331,28 @@ model ProfessionalService {
   priceRules     ServicePriceRule[]
   durationRules  ServiceDurationRule[]
   mediaAssets    MediaAsset[]
+  addOns         ServiceAddOn[]
   @@unique([professionalId, serviceId])
   @@index([professionalId, isActive])
+  @@index([serviceId])
   @@map("professional_services")
+}
+
+/// Professional-specific add-on attached to a ProfessionalService (price/duration independent per pro)
+model ServiceAddOn {
+  id                    String   @id @default(uuid()) @db.Uuid
+  professionalServiceId String   @map("professional_service_id") @db.Uuid
+  name                  String   @db.VarChar(150)
+  description           String?  @db.Text
+  price                 Int
+  extraDurationMin      Int      @default(0) @map("extra_duration_min")
+  isActive              Boolean  @default(true) @map("is_active")
+  sortOrder             Int      @default(0) @map("sort_order")
+  createdAt             DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt             DateTime @updatedAt @map("updated_at") @db.Timestamptz
+  professionalService ProfessionalService @relation(fields: [professionalServiceId], references: [id], onDelete: Cascade)
+  @@index([professionalServiceId, isActive])
+  @@map("service_add_ons")
 }
 
 model WorkingHour {
@@ -544,6 +563,7 @@ model MediaAsset {
   professional        Professional         @relation(fields: [professionalId], references: [id], onDelete: Cascade)
   professionalService ProfessionalService? @relation(fields: [professionalServiceId], references: [id], onDelete: SetNull)
   @@index([professionalId])
+  @@index([professionalServiceId])
   @@index([kind, status])
   @@map("media_assets")
 }
