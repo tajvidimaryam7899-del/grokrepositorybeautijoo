@@ -188,15 +188,31 @@ export async function fetchCategories() {
   return unwrapList(res as Paginated<CatalogCategory>);
 }
 
+/** Client-side image allowlist: MIME and/or extension (mobile often sends empty type). */
+export function isAllowedImageFile(file: File): boolean {
+  const mime = (file.type || '').toLowerCase().trim();
+  const name = (file.name || '').toLowerCase();
+  const ext = name.includes('.') ? name.split('.').pop() || '' : '';
+  const allowedMime = new Set([
+    'image/jpeg', 'image/jpg', 'image/pjpeg', 'image/png', 'image/webp', 'image/gif',
+    'image/heic', 'image/heif', 'image/heic-sequence', 'image/heif-sequence',
+  ]);
+  const allowedExt = new Set(['jpg', 'jpeg', 'png', 'webp', 'gif', 'heic', 'heif']);
+  if (mime && allowedMime.has(mime)) return true;
+  if (ext && allowedExt.has(ext)) return true;
+  // Empty MIME + no/unknown extension: let backend magic-byte sniff decide
+  if (!mime) return true;
+  return false;
+}
+
 export async function uploadMyMedia(file: File, kind: string, professionalServiceId?: string) {
   const { getAccessToken } = await import('./auth-storage');
   const { ApiError } = await import('./api');
   const API_URL = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000/api/v1').replace(/\/$/, '');
   const token = getAccessToken();
 
-  const allowed = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
-  if (!allowed.has(file.type)) {
-    throw new ApiError(400, 'فرمت این تصویر پشتیبانی نمی‌شود. فقط JPG، PNG، WEBP و GIF مجاز است.');
+  if (!isAllowedImageFile(file)) {
+    throw new ApiError(400, 'فرمت این تصویر پشتیبانی نمی‌شود. فقط JPG، PNG، WEBP، GIF یا HEIC مجاز است.');
   }
   if (file.size > 8 * 1024 * 1024) {
     throw new ApiError(400, 'حجم تصویر بیش از حد مجاز است (حداکثر ۸ مگابایت).');
