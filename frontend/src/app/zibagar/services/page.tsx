@@ -85,6 +85,7 @@ function flattenSearch(cats: CatalogCategory[]) {
 
 function statusOf(ps: ProfessionalServiceItem | undefined): 'ready' | 'incomplete' | 'none' {
   if (!ps) return 'none';
+  if (ps.isActive === false) return 'incomplete';
   if ((ps.price ?? 0) > 0 && (ps.durationMin ?? 0) > 0) return 'ready';
   return 'incomplete';
 }

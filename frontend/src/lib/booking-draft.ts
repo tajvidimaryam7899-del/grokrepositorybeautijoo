@@ -30,5 +30,8 @@ export function bookingLoginReturnPath(draft: BookingDraft): string {
     slot: draft.slotStart,
   });
   if (draft.locationId) sp.set('locationId', draft.locationId);
+  if (draft.addOnIds?.length) sp.set('addOnIds', draft.addOnIds.join(','));
+  if (draft.priceRuleId) sp.set('priceRuleId', draft.priceRuleId);
+  if (draft.durationRuleId) sp.set('durationRuleId', draft.durationRuleId);
   return `/booking/${encodeURIComponent(draft.professionalSlug)}?${sp.toString()}`;
 }

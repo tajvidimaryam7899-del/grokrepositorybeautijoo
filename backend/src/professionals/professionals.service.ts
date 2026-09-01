@@ -267,6 +267,8 @@ export class ProfessionalsService {
           service: { include: { category: true } },
           mediaAssets: { orderBy: { sortOrder: 'asc' as const } },
           addOns: { where: { isActive: true }, orderBy: { sortOrder: 'asc' as const } },
+          priceRules: { where: { isActive: true }, orderBy: { sortOrder: 'asc' as const } },
+          durationRules: { where: { isActive: true }, orderBy: { sortOrder: 'asc' as const } },
         },
       },
       workingHours: { where: { isActive: true }, include: { breaks: true } },

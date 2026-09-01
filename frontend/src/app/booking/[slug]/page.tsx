@@ -14,6 +14,9 @@ type Props = {
     date?: string;
     slot?: string;
     locationId?: string;
+    addOnIds?: string;
+    priceRuleId?: string;
+    durationRuleId?: string;
   }>;
 };
 
@@ -52,6 +55,22 @@ export default async function BookingPage({ params, searchParams }: Props) {
     bufferMin: ps.bufferMin ?? 0,
     price: ps.price,
     categoryName: ps.service.category?.name,
+    addOns: (ps.addOns || []).map((a) => ({
+      id: a.id,
+      name: a.name,
+      price: a.price,
+      extraDurationMin: a.extraDurationMin || 0,
+    })),
+    priceRules: (ps.priceRules || []).map((r) => ({
+      id: r.id,
+      label: r.label,
+      price: r.price,
+    })),
+    durationRules: (ps.durationRules || []).map((r) => ({
+      id: r.id,
+      label: r.label,
+      durationMin: r.durationMin,
+    })),
   }));
 
   const locations = (pro.locations || []).map((pl) => ({
@@ -61,6 +80,11 @@ export default async function BookingPage({ params, searchParams }: Props) {
     address: pl.location.address,
     isPrimary: pl.isPrimary,
   }));
+
+  const initialAddOnIds = (sp.addOnIds || '')
+    .split(',')
+    .map((x) => x.trim())
+    .filter(Boolean);
 
   return (
     <BookingWizard
@@ -76,6 +100,9 @@ export default async function BookingPage({ params, searchParams }: Props) {
       initialDate={sp.date}
       initialSlot={sp.slot}
       initialLocationId={sp.locationId}
+      initialAddOnIds={initialAddOnIds}
+      initialPriceRuleId={sp.priceRuleId}
+      initialDurationRuleId={sp.durationRuleId}
     />
   );
 }

@@ -31,6 +31,9 @@ type ServiceOption = {
   bufferMin: number;
   price: number;
   categoryName?: string;
+  addOns?: { id: string; name: string; price: number; extraDurationMin: number }[];
+  priceRules?: { id: string; label: string; price: number }[];
+  durationRules?: { id: string; label: string; durationMin: number }[];
 };
 
 type LocationOption = {
@@ -49,6 +52,9 @@ type Props = {
   initialDate?: string;
   initialSlot?: string;
   initialLocationId?: string;
+  initialAddOnIds?: string[];
+  initialPriceRuleId?: string;
+  initialDurationRuleId?: string;
 };
 
 type Step = 'service' | 'datetime' | 'summary' | 'done';
@@ -72,6 +78,9 @@ export function BookingWizard({
   initialDate,
   initialSlot,
   initialLocationId,
+  initialAddOnIds,
+  initialPriceRuleId,
+  initialDurationRuleId,
 }: Props) {
   const { isAuthenticated, loading: authLoading } = useAuth();
   const router = useRouter();
@@ -87,6 +96,11 @@ export function BookingWizard({
       '',
   );
   const [notes, setNotes] = useState('');
+  const [selectedAddOnIds, setSelectedAddOnIds] = useState<string[]>(initialAddOnIds || []);
+  const [priceRuleId, setPriceRuleId] = useState<string | null>(initialPriceRuleId || null);
+  const [durationRuleId, setDurationRuleId] = useState<string | null>(
+    initialDurationRuleId || null,
+  );
   const [slots, setSlots] = useState<AvailabilitySlot[]>([]);
   const [slotsLoading, setSlotsLoading] = useState(false);
   const [slotsError, setSlotsError] = useState<string | null>(null);
@@ -99,7 +113,63 @@ export function BookingWizard({
     () => services.find((s) => s.serviceId === serviceId) || null,
     [services, serviceId],
   );
-  const totalDuration = selected ? selected.durationMin + selected.bufferMin : 30;
+
+  // When service changes, reset rules to first available if needed
+  useEffect(() => {
+    if (!selected) return;
+    const pr = selected.priceRules || [];
+    const dr = selected.durationRules || [];
+    if (pr.length) {
+      if (!priceRuleId || !pr.some((r) => r.id === priceRuleId)) {
+        setPriceRuleId(pr[0].id);
+        const match = dr.find((d) => d.label === pr[0].label);
+        setDurationRuleId(match?.id || dr[0]?.id || null);
+      }
+    } else {
+      setPriceRuleId(null);
+    }
+    if (!dr.length) setDurationRuleId(null);
+    // Drop add-ons that don't belong to this service
+    const valid = new Set((selected.addOns || []).map((a) => a.id));
+    setSelectedAddOnIds((prev) => prev.filter((id) => valid.has(id)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected?.serviceId]);
+
+  const basePrice = useMemo(() => {
+    if (!selected) return 0;
+    if (priceRuleId) {
+      const rule = (selected.priceRules || []).find((r) => r.id === priceRuleId);
+      if (rule) return rule.price;
+    }
+    return selected.price;
+  }, [selected, priceRuleId]);
+
+  const baseDuration = useMemo(() => {
+    if (!selected) return 0;
+    if (durationRuleId) {
+      const rule = (selected.durationRules || []).find((r) => r.id === durationRuleId);
+      if (rule) return rule.durationMin;
+    }
+    return selected.durationMin;
+  }, [selected, durationRuleId]);
+
+  const addOnExtraPrice = useMemo(() => {
+    if (!selected) return 0;
+    return (selected.addOns || [])
+      .filter((a) => selectedAddOnIds.includes(a.id))
+      .reduce((s, a) => s + a.price, 0);
+  }, [selected, selectedAddOnIds]);
+
+  const addOnExtraDuration = useMemo(() => {
+    if (!selected) return 0;
+    return (selected.addOns || [])
+      .filter((a) => selectedAddOnIds.includes(a.id))
+      .reduce((s, a) => s + (a.extraDurationMin || 0), 0);
+  }, [selected, selectedAddOnIds]);
+
+  const displayPrice = basePrice + addOnExtraPrice;
+  const serviceDuration = baseDuration + addOnExtraDuration;
+  const totalDuration = selected ? serviceDuration + selected.bufferMin : 30;
 
   const loadSlots = useCallback(async () => {
     if (!selected || !date) return;
@@ -129,6 +199,22 @@ export function BookingWizard({
     else if (initialServiceId) setStep('datetime');
   }, [initialServiceId, initialDate, initialSlot]);
 
+  function toggleAddOn(id: string) {
+    setSelectedAddOnIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  }
+
+  function selectPriceRule(id: string) {
+    setPriceRuleId(id);
+    if (!selected) return;
+    const rule = (selected.priceRules || []).find((r) => r.id === id);
+    if (rule) {
+      const match = (selected.durationRules || []).find((d) => d.label === rule.label);
+      if (match) setDurationRuleId(match.id);
+    }
+  }
+
   function goDatetime() {
     if (selected) setStep('datetime');
   }
@@ -136,23 +222,30 @@ export function BookingWizard({
     if (selected && date && slotStart) setStep('summary');
   }
 
+  function buildDraft() {
+    return {
+      professionalId: professional.id,
+      professionalSlug: professional.slug,
+      professionalName: professional.name,
+      serviceId: selected!.serviceId,
+      serviceName: selected!.name,
+      durationMin: totalDuration,
+      price: displayPrice,
+      locationId: locationId || undefined,
+      date,
+      slotStart,
+      notes: notes || undefined,
+      addOnIds: selectedAddOnIds.length ? selectedAddOnIds : undefined,
+      priceRuleId: priceRuleId || undefined,
+      durationRuleId: durationRuleId || undefined,
+    };
+  }
+
   async function submitBooking() {
     if (!selected || !date || !slotStart) return;
     setSubmitError(null);
     if (!isAuthenticated) {
-      const draft = {
-        professionalId: professional.id,
-        professionalSlug: professional.slug,
-        professionalName: professional.name,
-        serviceId: selected.serviceId,
-        serviceName: selected.name,
-        durationMin: totalDuration,
-        price: selected.price,
-        locationId: locationId || undefined,
-        date,
-        slotStart,
-        notes: notes || undefined,
-      };
+      const draft = buildDraft();
       saveBookingDraft(draft);
       router.push(`/login?next=${encodeURIComponent(bookingLoginReturnPath(draft))}`);
       return;
@@ -166,6 +259,9 @@ export function BookingWizard({
         startAt,
         locationId: locationId || undefined,
         notes: notes.trim() || undefined,
+        addOnIds: selectedAddOnIds.length ? selectedAddOnIds : undefined,
+        priceRuleId: priceRuleId || undefined,
+        durationRuleId: durationRuleId || undefined,
       });
       clearBookingDraft();
       setBooking(created);
@@ -186,19 +282,7 @@ export function BookingWizard({
       }
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) {
-        const draft = {
-          professionalId: professional.id,
-          professionalSlug: professional.slug,
-          professionalName: professional.name,
-          serviceId: selected.serviceId,
-          serviceName: selected.name,
-          durationMin: totalDuration,
-          price: selected.price,
-          locationId: locationId || undefined,
-          date,
-          slotStart,
-          notes: notes || undefined,
-        };
+        const draft = buildDraft();
         saveBookingDraft(draft);
         router.push(`/login?next=${encodeURIComponent(bookingLoginReturnPath(draft))}`);
         return;
@@ -219,6 +303,11 @@ export function BookingWizard({
       </div>
     );
   }
+
+  const selectedAddOnNames =
+    selected?.addOns?.filter((a) => selectedAddOnIds.includes(a.id)).map((a) => a.name) || [];
+  const selectedRuleLabel =
+    (selected?.priceRules || []).find((r) => r.id === priceRuleId)?.label || null;
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-10" dir="rtl">
@@ -271,6 +360,65 @@ export function BookingWizard({
               </li>
             ))}
           </ul>
+
+          {selected && (selected.priceRules || []).length > 0 && (
+            <div className="space-y-2 border-t border-border pt-3">
+              <p className="text-sm font-medium">انتخاب مدل</p>
+              <ul className="space-y-1.5">
+                {(selected.priceRules || []).map((r) => {
+                  const on = priceRuleId === r.id;
+                  return (
+                    <li key={r.id}>
+                      <button
+                        type="button"
+                        onClick={() => selectPriceRule(r.id)}
+                        className={`flex w-full items-center justify-between rounded-xl border px-3 py-2 text-right text-sm ${
+                          on ? 'border-coral bg-coral/5' : 'border-border'
+                        }`}
+                      >
+                        <span>{on ? '✓ ' : ''}{r.label}</span>
+                        <span className="font-medium">{formatPrice(r.price)}</span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
+
+          {selected && (selected.addOns || []).length > 0 && (
+            <div className="space-y-2 border-t border-border pt-3">
+              <p className="text-sm font-medium">گزینه‌های جانبی</p>
+              <ul className="space-y-1.5">
+                {(selected.addOns || []).map((a) => {
+                  const on = selectedAddOnIds.includes(a.id);
+                  return (
+                    <li key={a.id}>
+                      <button
+                        type="button"
+                        onClick={() => toggleAddOn(a.id)}
+                        className={`flex w-full items-center justify-between rounded-xl border px-3 py-2 text-right text-sm ${
+                          on ? 'border-coral bg-coral/5' : 'border-border'
+                        }`}
+                      >
+                        <span>
+                          {on ? '✓ ' : ''}
+                          {a.name}
+                          {a.extraDurationMin ? ` (+${a.extraDurationMin}د)` : ''}
+                        </span>
+                        <span className="font-medium">{formatPrice(a.price)}</span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+              <div className="flex justify-between rounded-xl bg-gray-light/60 px-3 py-2 text-sm">
+                <span className="text-gray">جمع · {serviceDuration} دقیقه</span>
+                <span className="font-bold text-coral">{formatPrice(displayPrice)}</span>
+              </div>
+            </div>
+          )}
+
           <Button className="w-full" disabled={!serviceId} onClick={goDatetime}>
             ادامه
           </Button>
@@ -286,7 +434,11 @@ export function BookingWizard({
             </button>
           </div>
           <p className="text-sm text-gray">
-            {selected.name} — {totalDuration} دقیقه — {formatPrice(selected.price)}
+            {selected.name}
+            {selectedRuleLabel ? ` · ${selectedRuleLabel}` : ''}
+            {selectedAddOnNames.length ? ` · ${selectedAddOnNames.join('، ')}` : ''}
+            {' — '}
+            {totalDuration} دقیقه — {formatPrice(displayPrice)}
           </p>
           <div>
             <label className="mb-1 block text-sm font-medium">تاریخ</label>
@@ -362,9 +514,16 @@ export function BookingWizard({
           <dl className="space-y-2 text-sm">
             <div className="flex justify-between gap-2"><dt className="text-gray">زیباگر</dt><dd className="font-medium">{professional.name}</dd></div>
             <div className="flex justify-between gap-2"><dt className="text-gray">خدمت</dt><dd className="font-medium">{selected.name}</dd></div>
+            {selectedRuleLabel && (
+              <div className="flex justify-between gap-2"><dt className="text-gray">مدل</dt><dd className="font-medium">{selectedRuleLabel}</dd></div>
+            )}
+            {selectedAddOnNames.length > 0 && (
+              <div className="flex justify-between gap-2"><dt className="text-gray">افزودنی</dt><dd className="font-medium">{selectedAddOnNames.join('، ')}</dd></div>
+            )}
             <div className="flex justify-between gap-2"><dt className="text-gray">تاریخ</dt><dd dir="ltr">{date}</dd></div>
             <div className="flex justify-between gap-2"><dt className="text-gray">ساعت</dt><dd dir="ltr">{slotStart}</dd></div>
-            <div className="flex justify-between gap-2"><dt className="text-gray">قیمت</dt><dd className="font-bold text-coral">{formatPrice(selected.price)}</dd></div>
+            <div className="flex justify-between gap-2"><dt className="text-gray">مدت</dt><dd>{totalDuration} دقیقه</dd></div>
+            <div className="flex justify-between gap-2"><dt className="text-gray">قیمت</dt><dd className="font-bold text-coral">{formatPrice(displayPrice)}</dd></div>
           </dl>
           <div>
             <label className="mb-1 block text-sm font-medium">یادداشت (اختیاری)</label>
@@ -387,6 +546,7 @@ export function BookingWizard({
         <Card className="mt-6 space-y-4 text-center">
           <h2 className="text-xl font-bold text-coral">رزرو ثبت شد</h2>
           <p className="text-sm text-gray">وضعیت سرور: <strong>{persianBookingStatus(booking.status)}</strong></p>
+          <p className="text-sm font-bold text-coral">{formatPrice(booking.totalPrice)}</p>
           <p className="text-xs text-gray" dir="ltr">ID: {booking.id}</p>
           {paymentInfo && <p className="rounded-xl bg-gray-light px-3 py-3 text-sm text-gray">{paymentInfo}</p>}
           <p className="text-xs text-gray">موفقیت پرداخت فقط پس از تأیید سرور/درگاه — هرگز توسط کلاینت ادعا نمی‌شود.</p>

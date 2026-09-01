@@ -11,6 +11,12 @@ class CreateBookingDto {
   @IsString() startAt!: string;
   @IsOptional() @IsUUID() locationId?: string;
   @IsOptional() @IsString() notes?: string;
+  /** Selected ServiceAddOn ids — validated server-side against professional services */
+  @IsOptional() @IsArray() @IsUUID('4', { each: true }) addOnIds?: string[];
+  /** Optional active ServicePriceRule for the primary service */
+  @IsOptional() @IsUUID() priceRuleId?: string;
+  /** Optional active ServiceDurationRule for the primary service */
+  @IsOptional() @IsUUID() durationRuleId?: string;
 }
 
 class TransitionDto {
