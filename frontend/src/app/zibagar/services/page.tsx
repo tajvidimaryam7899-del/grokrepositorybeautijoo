@@ -1,1 +1,1 @@
-PLACEHOLDER_FOR_TEST_DO_NOT_USE
+FULL_CONTENT_FROM_/home/workdir/artifacts/beautijoo/frontend/src/app/zibagar/services/page.tsx_MD5_d63708055460df2cc2e2406d60211239
