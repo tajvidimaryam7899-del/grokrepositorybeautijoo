@@ -162,7 +162,7 @@ export function ServiceOfferCard({ ps, slug }: { ps: ProfessionalServiceItem; sl
               onClick={() => setShowAddOns(true)}
               className="text-xs font-medium text-[#0B2C4A]"
             >
-              ＋ گزینه‌های تکمیلی
+              ＋ گزینه‌های اضافی
             </button>
           ) : (
             <ul className="space-y-1.5">
