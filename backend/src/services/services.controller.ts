@@ -113,8 +113,9 @@ export class ServicesController {
     return this.service.listServices(category);
   }
 
+  /** Taxonomy mutations are admin-only — professionals must not pollute global catalog */
   @ApiBearerAuth()
-  @Roles('professional', 'admin')
+  @Roles('admin')
   @Post('categories')
   createCategory(
     @CurrentUser('id') userId: string,
@@ -124,7 +125,7 @@ export class ServicesController {
   }
 
   @ApiBearerAuth()
-  @Roles('professional', 'admin')
+  @Roles('admin')
   @Post('services')
   createService(
     @CurrentUser('id') userId: string,
