@@ -12,6 +12,7 @@ import {
   fetchMyProfessional, updateMyProfessional, addMyLocation, setMyWorkingHours,
   publishMyProfessional,
   uploadMyMedia, fetchCategories, resolveMediaUrl,
+  setMySelectedCategories,
   type CatalogCategory,
   type OwnProfessional, type ProfileCompletion,
 } from '@/lib/panel-api';
@@ -240,7 +241,13 @@ export default function ProfileCompletePage() {
       try {
         localStorage.setItem('beautijoo_wizard_root_categories', JSON.stringify(selectedRootIds));
       } catch { /* ignore */ }
-      setMsg('دسته‌های انتخاب‌شده ذخیره شد. جزئیات قیمت و نمونه‌کار را در «خدمات من» تکمیل کنید.');
+      try {
+        await setMySelectedCategories(selectedRootIds);
+      } catch (e) {
+        // non-blocking if backend field not yet migrated
+        console.warn('selectedCategoryIds persist failed', e);
+      }
+      setMsg('دسته‌های انتخاب‌شده ذخیره شد. جزئیات قیمت و نمونه‌کار را در «تخصص‌ها» تکمیل کنید.');
       return true;
     } catch (e) {
       setError(friendlyApiError(e));

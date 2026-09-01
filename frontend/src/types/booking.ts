@@ -16,6 +16,9 @@ export type CreateBookingPayload = {
   startAt: string; // ISO
   locationId?: string;
   notes?: string;
+  addOnIds?: string[];
+  priceRuleId?: string;
+  durationRuleId?: string;
 };
 
 export type BookingItem = {
@@ -63,4 +66,7 @@ export type BookingDraft = {
   date: string; // YYYY-MM-DD
   slotStart: string; // HH:MM
   notes?: string;
+  addOnIds?: string[];
+  priceRuleId?: string;
+  durationRuleId?: string;
 };

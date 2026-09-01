@@ -43,6 +43,21 @@ export type ProfessionalServiceAddOn = {
   extraDurationMin?: number;
 };
 
+export type ProfessionalServicePriceRule = {
+  id: string;
+  label: string;
+  price: number;
+  isActive?: boolean;
+};
+
+export type ProfessionalServiceDurationRule = {
+  id: string;
+  label: string;
+  durationMin: number;
+  durationMaxMin?: number | null;
+  isActive?: boolean;
+};
+
 export type ProfessionalServiceItem = {
   id: string;
   durationMin: number;
@@ -53,6 +68,8 @@ export type ProfessionalServiceItem = {
   service: ServiceSnippet;
   mediaAssets?: ProfessionalServiceMedia[];
   addOns?: ProfessionalServiceAddOn[];
+  priceRules?: ProfessionalServicePriceRule[];
+  durationRules?: ProfessionalServiceDurationRule[];
 };
 
 export type ProfessionalListItem = {

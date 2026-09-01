@@ -7,6 +7,7 @@ import {
 } from '@/lib/public-api';
 import { absoluteUrl, professionalJsonLd, siteName } from '@/lib/seo';
 import { ServiceOfferCard } from '@/components/professionals/service-offer-card';
+import { ServicePortfolioGallery } from '@/components/professionals/service-portfolio-gallery';
 import type { ProfessionalServiceItem } from '@/types/public';
 
 type Props = {
@@ -135,6 +136,11 @@ export default async function ProfessionalProfilePage({ params }: Props) {
             </section>
           )}
 
+          <ServicePortfolioGallery
+            slug={pro.slug}
+            services={(pro.professionalServices || []) as ProfessionalServiceItem[]}
+          />
+
           <section className="rounded-3xl border border-border bg-white p-6 shadow-sm">
             <h2 className="text-lg font-bold">خدمات و قیمت</h2>
             {(!pro.professionalServices ||
@@ -146,6 +152,7 @@ export default async function ProfessionalProfilePage({ params }: Props) {
                 <ServiceOfferCard
                   key={ps.id}
                   ps={ps as ProfessionalServiceItem}
+                  slug={pro.slug}
                 />
               ))}
             </ul>

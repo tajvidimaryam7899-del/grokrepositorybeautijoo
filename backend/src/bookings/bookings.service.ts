@@ -43,6 +43,9 @@ export class BookingsService {
       startAt: string;
       locationId?: string;
       notes?: string;
+      addOnIds?: string[];
+      priceRuleId?: string;
+      durationRuleId?: string;
     },
   ) {
     if (!data.serviceIds?.length) throw new BadRequestException('حداقل یک خدمت لازم است');
@@ -56,14 +59,96 @@ export class BookingsService {
         serviceId: { in: data.serviceIds },
         isActive: true,
       },
+      include: {
+        addOns: { where: { isActive: true } },
+        priceRules: { where: { isActive: true } },
+        durationRules: { where: { isActive: true } },
+      },
     });
     if (proServices.length !== data.serviceIds.length) {
       throw new BadRequestException('یکی از خدمات برای این زیباگر فعال نیست');
     }
 
-    const totalPrice = proServices.reduce((s, ps) => s + ps.price, 0);
-    const totalDuration =
-      proServices.reduce((s, ps) => s + ps.durationMin + ps.bufferMin, 0);
+    const requestedAddOnIds = Array.from(new Set(data.addOnIds || []));
+    const addOnById = new Map(
+      proServices.flatMap((ps) => ps.addOns.map((a) => [a.id, { ...a, professionalServiceId: ps.id }] as const)),
+    );
+    for (const id of requestedAddOnIds) {
+      if (!addOnById.has(id)) {
+        throw new BadRequestException('یکی از افزودنی‌های انتخاب‌شده معتبر یا فعال نیست');
+      }
+    }
+
+    // Price/duration rules apply to the first (primary) service when provided
+    const primary = proServices[0];
+    let priceRuleId: string | null = null;
+    let durationRuleId: string | null = null;
+    if (data.priceRuleId) {
+      const rule = primary.priceRules.find((r) => r.id === data.priceRuleId);
+      if (!rule) throw new BadRequestException('قانون قیمت انتخاب‌شده معتبر نیست');
+      priceRuleId = rule.id;
+    }
+    if (data.durationRuleId) {
+      const rule = primary.durationRules.find((r) => r.id === data.durationRuleId);
+      if (!rule) throw new BadRequestException('قانون زمان انتخاب‌شده معتبر نیست');
+      durationRuleId = rule.id;
+    }
+
+    type Line = {
+      serviceId: string;
+      professionalServiceId: string;
+      durationMin: number;
+      price: number;
+      addOnsSnapshot: { id: string; name: string; price: number; extraDurationMin: number }[];
+      priceRuleId: string | null;
+      durationRuleId: string | null;
+      bufferMin: number;
+    };
+
+    const lines: Line[] = proServices.map((ps, index) => {
+      let unitPrice = ps.price;
+      let unitDuration = ps.durationMin;
+      let linePriceRuleId: string | null = null;
+      let lineDurationRuleId: string | null = null;
+
+      if (index === 0 && priceRuleId) {
+        const rule = ps.priceRules.find((r) => r.id === priceRuleId)!;
+        unitPrice = rule.price;
+        linePriceRuleId = rule.id;
+      }
+      if (index === 0 && durationRuleId) {
+        const rule = ps.durationRules.find((r) => r.id === durationRuleId)!;
+        unitDuration = rule.durationMin;
+        lineDurationRuleId = rule.id;
+      }
+
+      const lineAddOns = requestedAddOnIds
+        .map((id) => addOnById.get(id)!)
+        .filter((a) => a.professionalServiceId === ps.id)
+        .map((a) => ({
+          id: a.id,
+          name: a.name,
+          price: a.price,
+          extraDurationMin: a.extraDurationMin || 0,
+        }));
+
+      const addOnPrice = lineAddOns.reduce((s, a) => s + a.price, 0);
+      const addOnDuration = lineAddOns.reduce((s, a) => s + a.extraDurationMin, 0);
+
+      return {
+        serviceId: ps.serviceId,
+        professionalServiceId: ps.id,
+        durationMin: unitDuration + addOnDuration,
+        price: unitPrice + addOnPrice,
+        addOnsSnapshot: lineAddOns,
+        priceRuleId: linePriceRuleId,
+        durationRuleId: lineDurationRuleId,
+        bufferMin: ps.bufferMin,
+      };
+    });
+
+    const totalPrice = lines.reduce((s, l) => s + l.price, 0);
+    const totalDuration = lines.reduce((s, l) => s + l.durationMin + l.bufferMin, 0);
 
     const startAt = new Date(data.startAt);
     if (isNaN(startAt.getTime()) || startAt.getTime() < Date.now()) {
@@ -96,11 +181,14 @@ export class BookingsService {
             totalPrice,
             notes: data.notes,
             items: {
-              create: proServices.map((ps, i) => ({
-                serviceId: ps.serviceId,
-                professionalServiceId: ps.id,
-                durationMin: ps.durationMin,
-                price: ps.price,
+              create: lines.map((line, i) => ({
+                serviceId: line.serviceId,
+                professionalServiceId: line.professionalServiceId,
+                durationMin: line.durationMin,
+                price: line.price,
+                addOnsSnapshot: line.addOnsSnapshot as unknown as Prisma.InputJsonValue,
+                priceRuleId: line.priceRuleId,
+                durationRuleId: line.durationRuleId,
                 sortOrder: i,
               })),
             },
@@ -113,7 +201,13 @@ export class BookingsService {
             action: 'booking.create',
             entityType: 'booking',
             entityId: b.id,
-            after: { status: b.status, totalPrice: b.totalPrice } as Prisma.InputJsonValue,
+            after: {
+              status: b.status,
+              totalPrice: b.totalPrice,
+              addOnIds: requestedAddOnIds,
+              priceRuleId,
+              durationRuleId,
+            } as Prisma.InputJsonValue,
           },
         });
         return b;
