@@ -291,7 +291,7 @@ export async function uploadMyMedia(file: File, kind: string, professionalServic
   const token = getAccessToken();
 
   if (!isAllowedImageFile(file) && !(file.type || '').startsWith('video/')) {
-    throw new ApiError(400, 'فرمت این فایل پشتیبانی نمی‌شود.');
+    throw new ApiError(400, 'این فایل تصویر/ویدیو قابل قبول نیست. JPG، PNG، WEBP یا HEIC امتحان کنید.');
   }
   if (file.size > 50 * 1024 * 1024) {
     throw new ApiError(400, 'حجم فایل بیش از حد مجاز است.');

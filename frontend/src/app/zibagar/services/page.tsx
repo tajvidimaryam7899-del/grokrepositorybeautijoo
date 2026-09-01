@@ -242,16 +242,31 @@ export default function ZibagarServicesPage() {
     return currentCategory?.services || [];
   }, [path, currentCategory, activeRootId, tree]);
 
-  /** Offered services under active root — the price menu table. */
+  /** Offered services under active root — restaurant-style menu. */
   const specialtyMenu = useMemo(() => {
     if (!activeRootId) return [];
     const root = findCategory(tree, activeRootId);
     const leaves = collectLeaves(root);
     const leafIds = new Set(leaves.map((l) => l.id));
     return mine
-      .filter((ps) => leafIds.has(ps.serviceId) || (ps.service?.category?.id && rootOf(tree, ps.service.category.id)?.id === activeRootId))
+      .filter(
+        (ps) =>
+          leafIds.has(ps.serviceId) ||
+          (ps.service?.category?.id && rootOf(tree, ps.service.category.id)?.id === activeRootId),
+      )
       .sort((a, b) => serviceLabel(a).localeCompare(serviceLabel(b), 'fa'));
   }, [activeRootId, tree, mine]);
+
+  /** Group menu items by parent category name for restaurant sections. */
+  const menuSections = useMemo(() => {
+    const map = new Map<string, ProfessionalServiceItem[]>();
+    for (const ps of specialtyMenu) {
+      const section = ps.service?.category?.name?.trim() || activeRoot?.name || 'خدمات';
+      if (!map.has(section)) map.set(section, []);
+      map.get(section)!.push(ps);
+    }
+    return Array.from(map.entries());
+  }, [specialtyMenu, activeRoot?.name]);
 
   /** All media under this specialty (all services). */
   const specialtyMedia = useMemo(() => {
@@ -683,13 +698,13 @@ export default function ZibagarServicesPage() {
       {/* ——— SPECIALTY DETAIL ——— */}
       {mode === 'specialty' && activeRootId && (
         <div className="space-y-5">
-          {/* Search services inside specialty only */}
+          {/* Primary search — restaurant menu discovery */}
           <div className="relative">
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="جستجوی خدمت…"
-              className="w-full"
+              placeholder="🔎 جستجوی خدمت"
+              className="w-full rounded-2xl border-gray-200 py-3 text-base shadow-sm"
             />
             {search.trim() && (
               <ul
@@ -771,58 +786,98 @@ export default function ZibagarServicesPage() {
             </ul>
           )}
 
-          {/* Price menu table for configured services */}
-          {specialtyMenu.length > 0 && (
-            <div className={`overflow-hidden rounded-2xl border ${navy.border} bg-white`}>
+          {/* Restaurant-style menu — sections, no forced sub-options */}
+          {menuSections.length > 0 && (
+            <div className={`rounded-2xl border ${navy.border} bg-white`}>
               <div className={`border-b ${navy.border} px-4 py-3`}>
-                <h2 className={`text-sm font-semibold ${navy.title}`}>
-                  قیمت‌های {activeRoot?.name}
-                </h2>
+                <h2 className={`text-sm font-semibold ${navy.title}`}>منوی {activeRoot?.name}</h2>
               </div>
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[280px] text-right text-sm">
-                  <thead className={`${navy.soft} text-xs text-gray-500`}>
-                    <tr>
-                      <th className="px-3 py-2 font-medium">خدمت</th>
-                      <th className="px-3 py-2 font-medium">قیمت</th>
-                      <th className="px-3 py-2 font-medium">مدت</th>
-                      <th className="px-3 py-2 font-medium" />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {specialtyMenu.map((ps) => {
-                      const st = statusOf(ps);
-                      return (
-                        <tr key={ps.id} className={`border-t ${navy.border}`}>
-                          <td className="px-3 py-2.5 font-medium">
-                            {serviceLabel(ps)}
-                            <span className="mr-1 text-xs font-normal text-gray-400">
-                              {st === 'ready' ? '🟢' : '🟡'}
-                            </span>
-                          </td>
-                          <td className="px-3 py-2.5 tabular-nums text-gray-700">
-                            {(ps.price ?? 0) > 0 ? formatPrice(ps.price) : '—'}
-                          </td>
-                          <td className="px-3 py-2.5 text-gray-700">
-                            {ps.durationMin ? `${ps.durationMin} دقیقه` : '—'}
-                          </td>
-                          <td className="px-3 py-2.5">
-                            <button
-                              type="button"
-                              className={`text-xs font-medium ${navy.title}`}
-                              onClick={() => {
-                                setSelectedPsId(ps.id);
-                                setMode('edit');
-                              }}
-                            >
-                              ویرایش
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+              <div className="divide-y divide-gray-100">
+                {menuSections.map(([section, items]) => (
+                  <div key={section} className="px-4 py-3">
+                    {menuSections.length > 1 && (
+                      <p className="mb-2 text-[11px] font-semibold tracking-wide text-gray-400">
+                        {section}
+                      </p>
+                    )}
+                    <ul className="space-y-3">
+                      {items.map((ps) => {
+                        const st = statusOf(ps);
+                        const rules = (ps.priceRules || []).filter((r) => r.isActive !== false);
+                        return (
+                          <li key={ps.id}>
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm font-medium text-gray-900">
+                                  {serviceLabel(ps)}
+                                  <span className="mr-1.5 text-[10px] text-gray-400">
+                                    {st === 'ready' ? '🟢' : '🟡'}
+                                  </span>
+                                </p>
+                                {rules.length > 0 ? (
+                                  <ul className="mt-1 space-y-0.5 border-r border-gray-200 pr-2.5">
+                                    {rules.map((r) => (
+                                      <li
+                                        key={r.id}
+                                        className="flex justify-between gap-3 text-xs text-gray-600"
+                                      >
+                                        <span>{r.label}</span>
+                                        <span className="tabular-nums">{formatPrice(r.price)}</span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                ) : (
+                                  <p className="mt-0.5 text-xs tabular-nums text-gray-600">
+                                    {(ps.price ?? 0) > 0 ? formatPrice(ps.price) : 'قیمت تعیین نشده'}
+                                    {ps.durationMin ? ` · ${ps.durationMin} دقیقه` : ''}
+                                  </p>
+                                )}
+                              </div>
+                              <div className="flex shrink-0 gap-2 text-xs">
+                                <button
+                                  type="button"
+                                  className={`font-medium ${navy.title}`}
+                                  onClick={() => {
+                                    setSelectedPsId(ps.id);
+                                    setMode('edit');
+                                  }}
+                                >
+                                  ویرایش
+                                </button>
+                                <button
+                                  type="button"
+                                  className="text-gray-400"
+                                  onClick={() => {
+                                    if (
+                                      typeof window === 'undefined' ||
+                                      !window.confirm(`حذف «${serviceLabel(ps)}»؟`)
+                                    ) {
+                                      return;
+                                    }
+                                    void (async () => {
+                                      setBusy(true);
+                                      try {
+                                        await deactivateMyService(ps.id);
+                                        await load();
+                                        setMsg('حذف شد');
+                                      } catch (e) {
+                                        setError(friendlyApiError(e));
+                                      } finally {
+                                        setBusy(false);
+                                      }
+                                    })();
+                                  }}
+                                >
+                                  حذف
+                                </button>
+                              </div>
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                ))}
               </div>
             </div>
           )}

@@ -10,18 +10,21 @@ function isVideo(mime?: string) {
 }
 
 export function ServiceOfferCard({ ps, slug }: { ps: ProfessionalServiceItem; slug?: string }) {
-  const addOns = ps.addOns || [];
+  const addOns = (ps.addOns || []).filter((a) => a.isActive !== false);
   const media = ps.mediaAssets || [];
-  const priceRules = (ps.priceRules || []).filter((r) => r.isActive !== false);
+  const priceRules = (ps.priceRules || [])
+    .filter((r) => r.isActive !== false)
+    .slice()
+    .sort((a, b) => (a.price ?? 0) - (b.price ?? 0));
   const durationRules = (ps.durationRules || []).filter((r) => r.isActive !== false);
   const [selectedAddOns, setSelectedAddOns] = useState<string[]>([]);
-  const [priceRuleId, setPriceRuleId] = useState<string | null>(
-    priceRules.length ? priceRules[0].id : null,
-  );
+  const [showAddOns, setShowAddOns] = useState(false);
+  const cheapest = priceRules[0] || null;
+  const [priceRuleId, setPriceRuleId] = useState<string | null>(cheapest ? cheapest.id : null);
   const [durationRuleId, setDurationRuleId] = useState<string | null>(() => {
     if (!durationRules.length) return null;
-    if (priceRules.length) {
-      const match = durationRules.find((d) => d.label === priceRules[0].label);
+    if (cheapest) {
+      const match = durationRules.find((d) => d.label === cheapest.label);
       return (match || durationRules[0]).id;
     }
     return durationRules[0].id;
@@ -82,59 +85,53 @@ export function ServiceOfferCard({ ps, slug }: { ps: ProfessionalServiceItem; sl
     return `/booking/${slug}?${params.toString()}`;
   }, [slug, ps.service?.id, selectedAddOns, priceRuleId, durationRuleId]);
 
+  const displayPriceLabel =
+    priceRules.length > 1 && !priceRuleId
+      ? `از ${formatPrice(priceRules[0].price)}`
+      : formatPrice(finalPrice);
+
   return (
-    <li className="rounded-2xl border border-border p-4">
+    <li className="rounded-2xl border border-gray-200 bg-white p-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <p className="font-medium">{ps.service.name}</p>
-          <p className="mt-0.5 text-xs text-gray">
-            {finalDuration} دقیقه
-            {ps.service.category?.name ? ` · ${ps.service.category.name}` : ''}
+          <p className="font-medium text-gray-900">{ps.service.name}</p>
+          <p className="mt-0.5 text-xs text-gray-500">
+            {finalDuration ? `${finalDuration} دقیقه` : ''}
           </p>
         </div>
-        <p className="font-semibold text-coral">{formatPrice(finalPrice)}</p>
+        <p className="font-semibold tabular-nums text-[#0B2C4A]">{displayPriceLabel}</p>
       </div>
 
-      {ps.description && (
-        <p className="mt-2 text-sm leading-6 text-gray">{ps.description}</p>
-      )}
-
       {priceRules.length > 0 && (
-        <div className="mt-3 space-y-2">
-          <p className="text-xs font-medium text-gray">انتخاب مدل</p>
-          <ul className="space-y-1.5">
-            {priceRules.map((r) => {
-              const on = priceRuleId === r.id;
-              const dur =
-                durationRules.find((d) => d.label === r.label)?.durationMin ??
-                baseDuration;
-              return (
-                <li key={r.id}>
-                  <button
-                    type="button"
-                    onClick={() => selectPriceRule(r.id)}
-                    className={`flex w-full items-center justify-between rounded-xl border px-3 py-2 text-right text-sm ${
-                      on
-                        ? 'border-coral bg-coral/5 text-foreground'
-                        : 'border-border bg-white text-gray'
-                    }`}
-                  >
-                    <span>
-                      {on ? '✓ ' : ''}
-                      {r.label}
-                      <span className="mt-0.5 block text-xs text-gray">{dur} دقیقه</span>
-                    </span>
-                    <span className="font-medium">{formatPrice(r.price)}</span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
+        <ul className="mt-3 space-y-1 border-r border-gray-200 pr-2.5">
+          {priceRules.map((r) => {
+            const on = priceRuleId === r.id;
+            const dur =
+              durationRules.find((d) => d.label === r.label)?.durationMin ?? baseDuration;
+            return (
+              <li key={r.id}>
+                <button
+                  type="button"
+                  onClick={() => selectPriceRule(r.id)}
+                  className={`flex w-full items-center justify-between py-1.5 text-right text-sm ${
+                    on ? 'font-medium text-gray-900' : 'text-gray-600'
+                  }`}
+                >
+                  <span>
+                    {on ? '● ' : '○ '}
+                    {r.label}
+                    {dur ? <span className="mr-1 text-xs text-gray-400">· {dur}د</span> : null}
+                  </span>
+                  <span className="tabular-nums">{formatPrice(r.price)}</span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
       )}
 
       {media.length > 0 && (
-        <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-4">
+        <div className="mt-3 grid grid-cols-3 gap-2">
           {media.map((m) =>
             isVideo(m.mimeType) ? (
               <video
@@ -158,46 +155,52 @@ export function ServiceOfferCard({ ps, slug }: { ps: ProfessionalServiceItem; sl
       )}
 
       {addOns.length > 0 && (
-        <div className="mt-3 space-y-2 border-t border-border pt-3">
-          <p className="text-xs font-medium text-gray">گزینه‌های جانبی</p>
-          <ul className="space-y-1.5">
-            {addOns.map((a) => {
-              const on = selectedAddOns.includes(a.id);
-              return (
-                <li key={a.id}>
-                  <button
-                    type="button"
-                    onClick={() => toggle(a.id)}
-                    className={`flex w-full items-center justify-between rounded-xl border px-3 py-2 text-right text-sm ${
-                      on
-                        ? 'border-coral bg-coral/5 text-foreground'
-                        : 'border-border bg-white text-gray'
-                    }`}
-                  >
-                    <span>
-                      {on ? '✓ ' : ''}
-                      {a.name}
-                      {a.extraDurationMin ? ` (+${a.extraDurationMin}د)` : ''}
-                    </span>
-                    <span className="font-medium">{formatPrice(a.price)}</span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-gray-light/60 px-3 py-2 text-sm">
-            <span className="text-gray">قیمت نهایی · {finalDuration} دقیقه</span>
-            <span className="font-bold text-coral">{formatPrice(finalPrice)}</span>
-          </div>
+        <div className="mt-3 border-t border-gray-100 pt-2">
+          {!showAddOns ? (
+            <button
+              type="button"
+              onClick={() => setShowAddOns(true)}
+              className="text-xs font-medium text-[#0B2C4A]"
+            >
+              ＋ گزینه‌های تکمیلی
+            </button>
+          ) : (
+            <ul className="space-y-1.5">
+              {addOns.map((a) => {
+                const on = selectedAddOns.includes(a.id);
+                return (
+                  <li key={a.id}>
+                    <button
+                      type="button"
+                      onClick={() => toggle(a.id)}
+                      className="flex w-full items-center justify-between py-1.5 text-right text-sm text-gray-700"
+                    >
+                      <span>
+                        {on ? '☑ ' : '☐ '}
+                        {a.name}
+                      </span>
+                      <span className="tabular-nums">{formatPrice(a.price)}</span>
+                    </button>
+                  </li>
+                );
+              })}
+              <div className="flex justify-between pt-1 text-sm">
+                <span className="text-gray-500">جمع</span>
+                <span className="font-semibold tabular-nums text-[#0B2C4A]">
+                  {formatPrice(finalPrice)}
+                </span>
+              </div>
+            </ul>
+          )}
         </div>
       )}
 
       {bookHref && (
         <Link
           href={bookHref}
-          className="mt-3 inline-flex h-10 w-full items-center justify-center rounded-xl bg-coral text-sm font-medium text-white"
+          className="mt-3 inline-flex h-10 w-full items-center justify-center rounded-xl bg-[#0B2C4A] text-sm font-medium text-white"
         >
-          رزرو همین مدل
+          رزرو
         </Link>
       )}
     </li>
