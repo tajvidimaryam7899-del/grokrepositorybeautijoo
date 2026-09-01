@@ -1,5 +1,5 @@
 'use client';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/auth-context';
 import { Card } from '@/components/ui/card';
@@ -29,6 +29,8 @@ const STEPS: WizardStep[] = [
   { id: 'hours', label: 'ساعات کاری' },
   { id: 'review', label: 'بررسی نهایی' },
 ];
+
+const FEATURED_ROOT_NAMES = ['پوست', 'مو', 'ناخن', 'میکاپ', 'مردانه'];
 
 const WEEK_DAYS = [
   { value: 'saturday', label: 'شنبه' },
@@ -71,7 +73,20 @@ export default function ProfileCompletePage() {
   const [cityOptions, setCityOptions] = useState<IranCity[]>([]);
   const [rootCategories, setRootCategories] = useState<CatalogCategory[]>([]);
   const [selectedRootIds, setSelectedRootIds] = useState<string[]>([]);
+  const [specialtyMoreOpen, setSpecialtyMoreOpen] = useState(false);
+  const [specialtySearch, setSpecialtySearch] = useState('');
   const [hourDays, setHourDays] = useState<string[]>(['saturday', 'sunday', 'monday', 'tuesday', 'wednesday', 'thursday']);
+
+  const featuredRootCategories = useMemo(() => {
+    const byName = new Map(rootCategories.map((r) => [r.name, r]));
+    return FEATURED_ROOT_NAMES.map((n) => byName.get(n)).filter(Boolean) as CatalogCategory[];
+  }, [rootCategories]);
+
+  const specialtySearchResults = useMemo(() => {
+    const q = specialtySearch.trim();
+    if (!q) return [];
+    return rootCategories.filter((r) => r.name.includes(q)).slice(0, 20);
+  }, [specialtySearch, rootCategories]);
   const [hourStart, setHourStart] = useState('10:00');
   const [hourEnd, setHourEnd] = useState('20:00');
 
@@ -489,35 +504,77 @@ export default function ProfileCompletePage() {
       )}
       {step === 4 && (
         <Card className="space-y-4">
-          <h2 className="font-semibold">دسته‌های خدمات شما</h2>
-          <p className="text-xs text-gray">
-            چند دسته اصلی را انتخاب کنید. قیمت، زمان و نمونه‌کار را بعداً در صفحه «خدمات من» تنظیم می‌کنید.
-          </p>
+          <h2 className="font-semibold text-[#0B2C4A]">تخصص خودت را انتخاب کن</h2>
           {!rootCategories.length ? (
-            <p className="text-sm text-gray">در حال بارگذاری دسته‌ها…</p>
+            <p className="text-sm text-gray">در حال بارگذاری…</p>
           ) : (
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              {rootCategories.map((c) => {
-                const on = selectedRootIds.includes(c.id);
-                return (
-                  <button
-                    key={c.id}
-                    type="button"
-                    onClick={() => toggleRootCategory(c.id)}
-                    className={`rounded-2xl border px-4 py-3 text-right text-sm transition ${
-                      on
-                        ? 'border-coral bg-coral text-white'
-                        : 'border-border bg-white text-foreground hover:border-coral/40'
-                    }`}
-                  >
-                    <span className="font-medium">{on ? '✓ ' : ''}{c.name}</span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-          {selectedRootIds.length > 0 && (
-            <p className="text-xs text-blue-dark">{selectedRootIds.length} دسته انتخاب شده</p>
+            <>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {featuredRootCategories.map((c) => {
+                  const on = selectedRootIds.includes(c.id);
+                  return (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => toggleRootCategory(c.id)}
+                      className={`rounded-2xl border px-3 py-3.5 text-right text-sm font-medium transition ${
+                        on
+                          ? 'border-[#0B2C4A] bg-[#0B2C4A] text-white'
+                          : 'border-gray-200 bg-white text-gray-800 hover:border-[#0B2C4A]/40'
+                      }`}
+                    >
+                      {on ? '✓ ' : ''}
+                      {c.name}
+                    </button>
+                  );
+                })}
+                <button
+                  type="button"
+                  onClick={() => setSpecialtyMoreOpen((v) => !v)}
+                  className="rounded-2xl border border-dashed border-gray-200 px-3 py-3.5 text-sm font-medium text-gray-600 hover:border-[#0B2C4A]/40"
+                >
+                  بیشتر…
+                </button>
+              </div>
+              {specialtyMoreOpen && (
+                <div className="space-y-2">
+                  <Input
+                    value={specialtySearch}
+                    onChange={(e) => setSpecialtySearch(e.target.value)}
+                    placeholder="جستجوی تخصص…"
+                    autoFocus
+                  />
+                  {specialtySearch.trim() && (
+                    <ul className="max-h-52 overflow-y-auto rounded-2xl border border-gray-200 bg-white p-1">
+                      {specialtySearchResults.length === 0 ? (
+                        <li className="px-3 py-2 text-sm text-gray-500">نتیجه‌ای نیست</li>
+                      ) : (
+                        specialtySearchResults.map((c) => {
+                          const on = selectedRootIds.includes(c.id);
+                          return (
+                            <li key={c.id}>
+                              <button
+                                type="button"
+                                onClick={() => toggleRootCategory(c.id)}
+                                className={`w-full rounded-xl px-3 py-2.5 text-right text-sm ${
+                                  on ? 'bg-[#0B2C4A] text-white' : 'hover:bg-[#F3F6F9]'
+                                }`}
+                              >
+                                {on ? '✓ ' : ''}
+                                {c.name}
+                              </button>
+                            </li>
+                          );
+                        })
+                      )}
+                    </ul>
+                  )}
+                </div>
+              )}
+              {selectedRootIds.length > 0 && (
+                <p className="text-xs text-[#0B2C4A]">{selectedRootIds.length} تخصص انتخاب شده</p>
+              )}
+            </>
           )}
         </Card>
       )}
