@@ -123,7 +123,6 @@ export class AuthService {
           },
           userRoles: {
             create: [
-              { roleId: customerRole.id },
               { roleId: proRole.id },
             ],
           },
@@ -151,6 +150,31 @@ export class AuthService {
         roles: user.userRoles.map((r) => r.role.name),
       },
       ...tokens,
+    };
+  }
+
+
+  /**
+   * Enable independent customer role for an existing user (e.g. professional
+   * who later wants a customer account on the same phone). Does not remove
+   * other roles. Idempotent.
+   */
+  async enableCustomerRole(userId: string) {
+    const customerRole = await this.prisma.role.findUnique({ where: { name: 'customer' } });
+    if (!customerRole) throw new BadRequestException('نقش مشتری تعریف نشده — seed را اجرا کنید');
+    await this.prisma.userRole.upsert({
+      where: { userId_roleId: { userId, roleId: customerRole.id } },
+      update: {},
+      create: { userId, roleId: customerRole.id },
+    });
+    const user = await this.prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+      include: { userRoles: { include: { role: true } } },
+    });
+    return {
+      id: user.id,
+      phone: user.phone,
+      roles: user.userRoles.map((r) => r.role.name),
     };
   }
 

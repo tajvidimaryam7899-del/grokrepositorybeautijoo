@@ -114,7 +114,7 @@ export class ServicesController {
   }
 
   @ApiBearerAuth()
-  @Roles('admin')
+  @Roles('professional', 'admin')
   @Post('categories')
   createCategory(
     @CurrentUser('id') userId: string,
@@ -124,7 +124,7 @@ export class ServicesController {
   }
 
   @ApiBearerAuth()
-  @Roles('admin')
+  @Roles('professional', 'admin')
   @Post('services')
   createService(
     @CurrentUser('id') userId: string,
@@ -161,7 +161,7 @@ export class ServicesController {
   @ApiBearerAuth()
   @Roles('professional', 'admin')
   @Delete('professionals/me/services/:id')
-  deactivate(@CurrentUser('id') userId: string, @Param('id') id: string) {
+  deleteMyService(@CurrentUser('id') userId: string, @Param('id') id: string) {
     return this.service.deactivateMyService(userId, id);
   }
 

@@ -267,10 +267,14 @@ export class ServicesService {
       where: { id, professionalId: pro.id },
     });
     if (!ps) throw new NotFoundException();
-    return this.prisma.professionalService.update({
-      where: { id },
-      data: { isActive: false },
-    });
+    // Hard delete: cascade removes addOns, priceRules, durationRules; media SetNull
+    await this.prisma.professionalService.delete({ where: { id } });
+    return { id, deleted: true };
+  }
+
+  /** Alias kept for callers that expect delete semantics */
+  async deleteMyService(userId: string, id: string) {
+    return this.deactivateMyService(userId, id);
   }
 
   private async requireOwnPs(userId: string, professionalServiceId: string) {

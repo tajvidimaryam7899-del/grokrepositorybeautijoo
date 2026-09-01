@@ -61,4 +61,10 @@ export class AuthController {
   me(@CurrentUser('id') userId: string) {
     return this.auth.me(userId);
   }
+
+  @ApiBearerAuth()
+  @Post('enable-customer-role')
+  enableCustomerRole(@CurrentUser('id') userId: string) {
+    return this.auth.enableCustomerRole(userId);
+  }
 }
