@@ -41,6 +41,7 @@ export type ProfessionalServiceAddOn = {
   description?: string | null;
   price: number;
   extraDurationMin?: number;
+  isActive?: boolean;
 };
 
 export type ProfessionalServicePriceRule = {
