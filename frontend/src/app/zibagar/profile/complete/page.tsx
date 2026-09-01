@@ -13,6 +13,7 @@ import {
   publishMyProfessional,
   uploadMyMedia, fetchCategories, resolveMediaUrl,
   setMySelectedCategories,
+  createCategoryNode,
   type CatalogCategory,
   type OwnProfessional, type ProfileCompletion,
 } from '@/lib/panel-api';
@@ -76,6 +77,8 @@ export default function ProfileCompletePage() {
   const [specialtyMoreOpen, setSpecialtyMoreOpen] = useState(false);
   const [specialtySearch, setSpecialtySearch] = useState('');
   const [hourDays, setHourDays] = useState<string[]>(['saturday', 'sunday', 'monday', 'tuesday', 'wednesday', 'thursday']);
+  const [hourStart, setHourStart] = useState('10:00');
+  const [hourEnd, setHourEnd] = useState('20:00');
 
   const featuredRootCategories = useMemo(() => {
     const byName = new Map(rootCategories.map((r) => [r.name, r]));
@@ -87,8 +90,6 @@ export default function ProfileCompletePage() {
     if (!q) return [];
     return rootCategories.filter((r) => r.name.includes(q)).slice(0, 20);
   }, [specialtySearch, rootCategories]);
-  const [hourStart, setHourStart] = useState('10:00');
-  const [hourEnd, setHourEnd] = useState('20:00');
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
@@ -148,13 +149,26 @@ export default function ProfileCompletePage() {
         .then((cats) => {
           const roots = (cats || []).filter((c) => !c.parentId);
           setRootCategories(roots);
+          const fromPro = Array.isArray(pro?.selectedCategoryIds)
+            ? (pro!.selectedCategoryIds as string[]).filter((id) => roots.some((r) => r.id === id))
+            : [];
           try {
             const raw = localStorage.getItem('beautijoo_wizard_root_categories');
             if (raw) {
               const ids = JSON.parse(raw) as string[];
-              if (Array.isArray(ids)) setSelectedRootIds(ids.filter((id) => roots.some((r) => r.id === id)));
+              if (Array.isArray(ids)) {
+                const merged = Array.from(new Set([
+                  ...fromPro,
+                  ...ids.filter((id) => roots.some((r) => r.id === id)),
+                ]));
+                setSelectedRootIds(merged);
+              } else if (fromPro.length) setSelectedRootIds(fromPro);
+            } else if (fromPro.length) {
+              setSelectedRootIds(fromPro);
             }
-          } catch { /* ignore */ }
+          } catch {
+            if (fromPro.length) setSelectedRootIds(fromPro);
+          }
           if (pro?.professionalServices?.length) {
             const fromServices = new Set<string>();
             for (const ps of pro.professionalServices) {
@@ -250,19 +264,14 @@ export default function ProfileCompletePage() {
     setSaving(true); setError(null); setMsg(null);
     try {
       if (!selectedRootIds.length) {
-        setError('حداقل یک دسته خدمات انتخاب کنید');
+        setError('انتخاب حداقل یک تخصص الزامی است');
         return false;
       }
       try {
         localStorage.setItem('beautijoo_wizard_root_categories', JSON.stringify(selectedRootIds));
       } catch { /* ignore */ }
-      try {
-        await setMySelectedCategories(selectedRootIds);
-      } catch (e) {
-        // non-blocking if backend field not yet migrated
-        console.warn('selectedCategoryIds persist failed', e);
-      }
-      setMsg('دسته‌های انتخاب‌شده ذخیره شد. جزئیات قیمت و نمونه‌کار را در «تخصص‌ها» تکمیل کنید.');
+      await setMySelectedCategories(selectedRootIds);
+      setMsg('تخصص‌ها ذخیره شد. جزئیات قیمت را در بخش تخصص‌ها تکمیل کنید.');
       return true;
     } catch (e) {
       setError(friendlyApiError(e));
@@ -361,9 +370,10 @@ export default function ProfileCompletePage() {
       {step === 1 && (
         <Card className="space-y-4">
           <h2 className="font-semibold">معرفی / بیو</h2>
-          <label className="block space-y-1 text-sm">درباره شما (حداقل ۱۰ کاراکتر)
+          <p className="text-xs text-gray">اختیاری — بدون بیو هم می‌توانید پروفایل را کامل کنید.</p>
+          <label className="block space-y-1 text-sm">درباره شما
             <textarea className="w-full rounded-xl border border-border p-3 text-sm" rows={4}
-              value={bio} onChange={(e) => setBio(e.target.value)} /></label>
+              value={bio} onChange={(e) => setBio(e.target.value)} placeholder="اختیاری" /></label>
         </Card>
       )}
       {step === 2 && (
@@ -546,26 +556,50 @@ export default function ProfileCompletePage() {
                   />
                   {specialtySearch.trim() && (
                     <ul className="max-h-52 overflow-y-auto rounded-2xl border border-gray-200 bg-white p-1">
-                      {specialtySearchResults.length === 0 ? (
-                        <li className="px-3 py-2 text-sm text-gray-500">نتیجه‌ای نیست</li>
-                      ) : (
-                        specialtySearchResults.map((c) => {
-                          const on = selectedRootIds.includes(c.id);
-                          return (
-                            <li key={c.id}>
-                              <button
-                                type="button"
-                                onClick={() => toggleRootCategory(c.id)}
-                                className={`w-full rounded-xl px-3 py-2.5 text-right text-sm ${
-                                  on ? 'bg-[#0B2C4A] text-white' : 'hover:bg-[#F3F6F9]'
-                                }`}
-                              >
-                                {on ? '✓ ' : ''}
-                                {c.name}
-                              </button>
-                            </li>
-                          );
-                        })
+                      {specialtySearchResults.map((c) => {
+                        const on = selectedRootIds.includes(c.id);
+                        return (
+                          <li key={c.id}>
+                            <button
+                              type="button"
+                              onClick={() => toggleRootCategory(c.id)}
+                              className={`w-full rounded-xl px-3 py-2.5 text-right text-sm ${
+                                on ? 'bg-[#0B2C4A] text-white' : 'hover:bg-[#F3F6F9]'
+                              }`}
+                            >
+                              {on ? '✓ ' : ''}
+                              {c.name}
+                            </button>
+                          </li>
+                        );
+                      })}
+                      {!specialtySearchResults.some((c) => c.name === specialtySearch.trim()) && (
+                        <li>
+                          <button
+                            type="button"
+                            disabled={saving}
+                            onClick={async () => {
+                              setSaving(true); setError(null);
+                              try {
+                                const created = await createCategoryNode({ name: specialtySearch.trim() });
+                                setRootCategories((prev) => [...prev, created]);
+                                setSelectedRootIds((prev) => Array.from(new Set([...prev, created.id])));
+                                setSpecialtySearch('');
+                                setMsg(`تخصص «${created.name}» اضافه شد`);
+                              } catch (e) {
+                                setError(friendlyApiError(e));
+                              } finally {
+                                setSaving(false);
+                              }
+                            }}
+                            className="w-full rounded-xl px-3 py-2.5 text-right text-sm font-semibold text-[#0B2C4A] hover:bg-[#F3F6F9]"
+                          >
+                            ＋ افزودن «{specialtySearch.trim()}»
+                          </button>
+                        </li>
+                      )}
+                      {specialtySearchResults.length === 0 && (
+                        <li className="px-3 py-1 text-xs text-gray-400">در فهرست نبود — می‌توانید بسازید</li>
                       )}
                     </ul>
                   )}
