@@ -102,14 +102,12 @@ export class MediaController {
       throw new BadRequestException('فایل ارسال نشده است');
     }
     if (!kind || typeof kind !== 'string') {
-      throw new BadRequestException('نوع تصویر (kind) الزامی است');
+      throw new BadRequestException('نوع تصویر مشخص نشده است');
     }
     const normalizedKind = kind.trim().toLowerCase() as MediaKind;
     const validKinds = Object.values(MediaKind) as string[];
     if (!validKinds.includes(normalizedKind)) {
-      throw new BadRequestException(
-        `نوع تصویر نامعتبر است. مقادیر مجاز: ${validKinds.join(', ')}`,
-      );
+      throw new BadRequestException('نوع تصویر نامعتبر است. لطفاً دوباره تلاش کنید.');
     }
 
     this.logger.log(

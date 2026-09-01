@@ -61,48 +61,44 @@ export default function ZibagarDashboard() {
         <p className="mt-1 text-sm text-gray">{title}</p>
       </div>
 
-      <Card className="space-y-3">
-        {published ? (
-          <>
-            <h2 className="font-semibold text-blue">پروفایل منتشر شده ✓</h2>
-            <CompletionBar percent={100} />
-            <div className="flex flex-wrap gap-2">
-              {slug && (
-                <Link href={`/professionals/${slug}`}>
-                  <Button size="sm">مشاهده صفحه عمومی</Button>
-                </Link>
-              )}
-              <Link href="/zibagar/profile">
-                <Button variant="outline" size="sm">مدیریت پروفایل</Button>
+      {published ? (
+        <Card className="space-y-3">
+          <h2 className="font-semibold text-[#0B2C4A]">پروفایل منتشر شده</h2>
+          <div className="flex flex-wrap gap-2">
+            {slug && (
+              <Link href={`/professionals/${slug}`}>
+                <Button size="sm">مشاهده صفحه عمومی</Button>
               </Link>
-            </div>
-          </>
-        ) : complete ? (
-          <>
-            <h2 className="font-semibold text-blue">اطلاعات پروفایل کامل است ✓</h2>
-            <CompletionBar percent={percent} />
-            <div className="flex flex-wrap gap-2">
-              <Link href="/zibagar/profile/preview">
-                <Button variant="secondary" size="sm">مشاهده پیش‌نمایش</Button>
-              </Link>
-              <Link href="/zibagar/profile/complete">
-                <Button size="sm">انتشار پروفایل</Button>
-              </Link>
-            </div>
-          </>
-        ) : (
-          <>
-            <h2 className="font-semibold">تکمیل پروفایل — {percent}%</h2>
-            <CompletionBar percent={percent} />
-            <p className="text-sm text-gray">
-              برای نمایش در سایت و دریافت رزرو، ابتدا پروفایل را کامل کنید.
-            </p>
-            <Link href="/zibagar/profile/complete">
-              <Button size="sm">ادامه تکمیل پروفایل</Button>
+            )}
+            <Link href="/zibagar/profile">
+              <Button variant="outline" size="sm">مدیریت پروفایل</Button>
             </Link>
-          </>
-        )}
-      </Card>
+          </div>
+        </Card>
+      ) : complete || percent >= 100 ? (
+        <Card className="space-y-3">
+          <h2 className="font-semibold text-[#0B2C4A]">آماده انتشار</h2>
+          <div className="flex flex-wrap gap-2">
+            <Link href="/zibagar/profile/preview">
+              <Button variant="secondary" size="sm">پیش‌نمایش</Button>
+            </Link>
+            <Link href="/zibagar/profile/complete">
+              <Button size="sm">انتشار</Button>
+            </Link>
+          </div>
+        </Card>
+      ) : (
+        <Card className="space-y-3">
+          <h2 className="font-semibold">تکمیل پروفایل — {percent}%</h2>
+          <CompletionBar percent={percent} />
+          <p className="text-sm text-gray">
+            برای نمایش در سایت و دریافت رزرو، ابتدا پروفایل را کامل کنید.
+          </p>
+          <Link href="/zibagar/profile/complete">
+            <Button size="sm">ادامه تکمیل پروفایل</Button>
+          </Link>
+        </Card>
+      )}
 
       {showOps && (
         <div className="grid gap-4 sm:grid-cols-2">
