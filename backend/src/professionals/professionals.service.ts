@@ -208,6 +208,7 @@ export class ProfessionalsService {
 
   computeCompletion(pro: {
     title?: string | null; bio?: string | null; coverImageUrl?: string | null;
+    selectedCategoryIds?: unknown;
     user?: { profile?: {
       firstName?: string | null; lastName?: string | null;
       avatarUrl?: string | null; bio?: string | null;
@@ -220,16 +221,21 @@ export class ProfessionalsService {
     const hasTitle = !!(pro.title && pro.title.trim().length >= 2);
     const hasFirst = !!(profile?.firstName && profile.firstName.trim());
     const hasLast = !!(profile?.lastName && profile.lastName.trim());
-    const hasBio = !!(pro.bio && pro.bio.trim()) || !!(profile?.bio && profile.bio.trim());
+    // Bio is optional — never blocks completion to 100%
+    const hasBio = true;
     const hasImage = !!(
       (pro.coverImageUrl && pro.coverImageUrl.trim()) ||
       ((pro as { logoUrl?: string | null }).logoUrl && String((pro as { logoUrl?: string | null }).logoUrl).trim()) ||
       (profile?.avatarUrl && profile.avatarUrl.trim())
     );
     const hasLocation = Array.isArray(pro.locations) && pro.locations.length > 0;
+    const selectedCats = Array.isArray(pro.selectedCategoryIds)
+      ? (pro.selectedCategoryIds as unknown[]).filter((x) => typeof x === 'string' && String(x).length > 0)
+      : [];
     const hasService =
-      Array.isArray(pro.professionalServices) &&
-      pro.professionalServices.some((s) => s.isActive !== false);
+      selectedCats.length > 0 ||
+      (Array.isArray(pro.professionalServices) &&
+        pro.professionalServices.some((s) => s.isActive !== false));
     const hasHours =
       Array.isArray(pro.workingHours) &&
       pro.workingHours.some((h) => h.isActive !== false);
@@ -238,14 +244,15 @@ export class ProfessionalsService {
       { key: 'title', label: COMPLETION_LABELS.title, done: hasTitle },
       { key: 'firstName', label: COMPLETION_LABELS.firstName, done: hasFirst },
       { key: 'lastName', label: COMPLETION_LABELS.lastName, done: hasLast },
-      { key: 'bio', label: COMPLETION_LABELS.bio, done: hasBio },
+      { key: 'bio', label: COMPLETION_LABELS.bio + ' (اختیاری)', done: hasBio },
       { key: 'avatarOrCover', label: COMPLETION_LABELS.avatarOrCover, done: hasImage },
       { key: 'location', label: COMPLETION_LABELS.location, done: hasLocation },
       { key: 'service', label: COMPLETION_LABELS.service, done: hasService },
       { key: 'workingHours', label: COMPLETION_LABELS.workingHours, done: hasHours },
     ];
-    const doneCount = fields.filter((f) => f.done).length;
-    const percent = Math.round((doneCount / fields.length) * 100);
+    const required = fields.filter((f) => f.key !== 'bio');
+    const doneCount = required.filter((f) => f.done).length;
+    const percent = Math.round((doneCount / required.length) * 100);
     return { percent, complete: percent === 100, fields };
   }
 
