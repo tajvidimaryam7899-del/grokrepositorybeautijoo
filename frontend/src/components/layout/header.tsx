@@ -73,12 +73,25 @@ export function Header() {
                   پنل زیباگر
                 </Link>
               )}
-              <Link
-                href="/panel"
-                className="rounded-2xl bg-gray-light px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-gray-mid"
-              >
-                {displayName}
-              </Link>
+              {hasRole('customer') && (
+                <Link
+                  href="/panel"
+                  className="rounded-2xl bg-gray-light px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-gray-mid"
+                >
+                  پنل مشتری
+                </Link>
+              )}
+              {!hasRole('customer') && hasRole('professional') && (
+                <Link
+                  href="/zibagar"
+                  className="rounded-2xl bg-gray-light px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-gray-mid"
+                >
+                  {displayName}
+                </Link>
+              )}
+              {hasRole('customer') && !hasRole('professional') && (
+                <span className="hidden text-sm text-gray sm:inline">{displayName}</span>
+              )}
               <Button variant="ghost" size="sm" onClick={() => logout()}>
                 خروج
               </Button>
@@ -141,13 +154,15 @@ export function Header() {
             <div className="my-2 h-px bg-border" />
             {isAuthenticated ? (
               <>
+                {hasRole('customer') && (
                 <Link
                   href="/panel"
                   onClick={() => setOpen(false)}
                   className="rounded-xl px-3 py-3 text-foreground hover:bg-gray-light"
                 >
-                  پنل من
+                    پنل مشتری
                 </Link>
+                )}
                 {hasRole('professional') && (
                   <Link
                     href="/zibagar"
