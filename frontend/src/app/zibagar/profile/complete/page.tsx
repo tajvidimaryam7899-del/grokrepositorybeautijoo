@@ -103,6 +103,9 @@ export default function ProfileCompletePage() {
       setAvatarUrl(resolveMediaUrl(data.user?.profile?.avatarUrl || ''));
       setCoverImageUrl(resolveMediaUrl(data.coverImageUrl || ''));
       setLogoUrl(resolveMediaUrl((data as { logoUrl?: string }).logoUrl || ''));
+      if (Array.isArray(data.selectedCategoryIds) && data.selectedCategoryIds.length) {
+        setSelectedRootIds(data.selectedCategoryIds as string[]);
+      }
       const primary = data.locations?.find((l) => l.isPrimary) || data.locations?.[0];
       if (primary) {
         setLocName(primary.location.name || '');
@@ -152,33 +155,7 @@ export default function ProfileCompletePage() {
           const fromPro = Array.isArray(pro?.selectedCategoryIds)
             ? (pro!.selectedCategoryIds as string[]).filter((id) => roots.some((r) => r.id === id))
             : [];
-          try {
-            const raw = localStorage.getItem('beautijoo_wizard_root_categories');
-            if (raw) {
-              const ids = JSON.parse(raw) as string[];
-              if (Array.isArray(ids)) {
-                const merged = Array.from(new Set([
-                  ...fromPro,
-                  ...ids.filter((id) => roots.some((r) => r.id === id)),
-                ]));
-                setSelectedRootIds(merged);
-              } else if (fromPro.length) setSelectedRootIds(fromPro);
-            } else if (fromPro.length) {
-              setSelectedRootIds(fromPro);
-            }
-          } catch {
-            if (fromPro.length) setSelectedRootIds(fromPro);
-          }
-          if (pro?.professionalServices?.length) {
-            const fromServices = new Set<string>();
-            for (const ps of pro.professionalServices) {
-              const cid = (ps as { service?: { category?: { id?: string } } }).service?.category?.id;
-              if (cid) fromServices.add(cid);
-            }
-            const rootIds = new Set(roots.map((r) => r.id));
-            const selected = [...fromServices].filter((id) => rootIds.has(id));
-            if (selected.length) setSelectedRootIds((prev) => Array.from(new Set([...prev, ...selected])));
-          }
+          if (fromPro.length) setSelectedRootIds(fromPro);
         })
         .catch(() => setRootCategories([]));
     }
@@ -267,10 +244,8 @@ export default function ProfileCompletePage() {
         setError('انتخاب حداقل یک تخصص الزامی است');
         return false;
       }
-      try {
-        localStorage.setItem('beautijoo_wizard_root_categories', JSON.stringify(selectedRootIds));
-      } catch { /* ignore */ }
-      await setMySelectedCategories(selectedRootIds);
+      const data = await setMySelectedCategories(selectedRootIds);
+      setPro(data); setCompletion(data.completion || null);
       setMsg('تخصص‌ها ذخیره شد. جزئیات قیمت را در بخش تخصص‌ها تکمیل کنید.');
       return true;
     } catch (e) {
@@ -281,10 +256,20 @@ export default function ProfileCompletePage() {
     }
   }
 
-  function toggleRootCategory(id: string) {
-    setSelectedRootIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
-    );
+  /** BUG2 fix: persist specialty to DB immediately on toggle so refresh keeps selection */
+  async function toggleRootCategory(id: string) {
+    const next = selectedRootIds.includes(id)
+      ? selectedRootIds.filter((x) => x !== id)
+      : [...selectedRootIds, id];
+    setSelectedRootIds(next);
+    try {
+      const data = await setMySelectedCategories(next);
+      setPro(data);
+      setCompletion(data.completion || null);
+    } catch (e) {
+      setError(friendlyApiError(e));
+      setSelectedRootIds(selectedRootIds);
+    }
   }
 
   async function saveHours() {
@@ -398,11 +383,7 @@ export default function ProfileCompletePage() {
                   <span className="text-sm font-medium">{label}</span>
                   <label className="cursor-pointer rounded-lg bg-coral px-3 py-1.5 text-xs font-medium text-white hover:opacity-90">
                     {uploading === kind ? '...' : url ? 'تعویض' : 'آپلود'}
-                    <input
-                      type="file"
-                      accept="image/jpeg,image/png,image/webp,image/gif"
-                      className="hidden"
-                      disabled={!!uploading}
+                    <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" className="hidden" disabled={!!uploading}
                       onChange={async (e) => {
                         const file = e.target.files?.[0];
                         if (!file) return;
@@ -431,7 +412,7 @@ export default function ProfileCompletePage() {
       {step === 3 && (
         <Card className="space-y-4">
           <h2 className="font-semibold">موقعیت محل فعالیت</h2>
-          <p className="text-xs text-gray">استان و شهر الزامی است. موقعیت دقیق را روی نقشه انتخاب کنید.</p>
+          <p className="text-xs text-gray">استان و شهر الزامی است.</p>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <label className="block space-y-1 text-sm">استان *
               <select className="w-full rounded-xl border border-border p-3 text-sm" value={locProvince}
@@ -439,75 +420,40 @@ export default function ProfileCompletePage() {
                   const name = e.target.value;
                   setLocProvince(name);
                   setCityOptions(citiesOf(name));
-                  setLocCity('');
-                  setCitySearch('');
-                  setLocLat(null); setLocLng(null);
-                  setMapSelected(false);
+                  setLocCity(''); setCitySearch('');
+                  setLocLat(null); setLocLng(null); setMapSelected(false);
                 }}>
                 <option value="">انتخاب استان</option>
                 {IRAN_PROVINCES.map((pr) => <option key={pr.name} value={pr.name}>{pr.name}</option>)}
               </select>
             </label>
             <label className="block space-y-1 text-sm">شهر *
-              <input
-                type="text"
-                className="mb-1 w-full rounded-xl border border-border p-2 text-sm"
-                placeholder="جستجوی شهر…"
-                value={citySearch}
-                disabled={!locProvince}
-                onChange={(e) => setCitySearch(e.target.value)}
-              />
-              <select className="w-full rounded-xl border border-border p-3 text-sm" value={locCity}
-                disabled={!locProvince}
+              <input type="text" className="mb-1 w-full rounded-xl border border-border p-2 text-sm" placeholder="جستجوی شهر…"
+                value={citySearch} disabled={!locProvince} onChange={(e) => setCitySearch(e.target.value)} />
+              <select className="w-full rounded-xl border border-border p-3 text-sm" value={locCity} disabled={!locProvince}
                 onChange={(e) => {
                   const name = e.target.value;
                   setLocCity(name);
                   const c = cityOptions.find((x) => x.name === name);
-                  if (c) {
-                    setLocLat(c.lat); setLocLng(c.lng);
-                    setMapSelected(false);
-                  }
+                  if (c) { setLocLat(c.lat); setLocLng(c.lng); setMapSelected(false); }
                 }}>
                 <option value="">انتخاب شهر</option>
-                {cityOptions
-                  .filter((c) => !citySearch.trim() || c.name.includes(citySearch.trim()))
-                  .map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}
+                {cityOptions.filter((c) => !citySearch.trim() || c.name.includes(citySearch.trim())).map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}
               </select>
             </label>
           </div>
           <label className="block space-y-1 text-sm">آدرس (اختیاری)
-            <Input value={locAddress} onChange={(e) => setLocAddress(e.target.value)} placeholder="خیابان، پلاک، …" /></label>
+            <Input value={locAddress} onChange={(e) => setLocAddress(e.target.value)} /></label>
           <label className="block space-y-1 text-sm">نام محل (اختیاری)
-            <Input value={locName} onChange={(e) => setLocName(e.target.value)} placeholder="سالن زیبایی …" /></label>
-
+            <Input value={locName} onChange={(e) => setLocName(e.target.value)} /></label>
           {locCity && (
             <div className="space-y-2">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-sm font-medium">انتخاب موقعیت روی نقشه</p>
-                {mapSelected && locLat != null && locLng != null && (
-                  <span className="rounded-full bg-blue/10 px-2.5 py-0.5 text-xs font-medium text-blue">موقعیت انتخاب شد ✓</span>
-                )}
-              </div>
-              <p className="text-[11px] text-gray">روی نقشه کلیک کنید یا نشانگر را جابه‌جا کنید. مختصات عددی نمایش داده نمی‌شود.</p>
+              <p className="text-sm font-medium">موقعیت روی نقشه</p>
               <LocationMapPicker
                 position={locLat != null && locLng != null ? { lat: locLat, lng: locLng } : null}
-                onPositionChange={(pos: MapPosition) => {
-                  setLocLat(pos.lat);
-                  setLocLng(pos.lng);
-                  setMapSelected(true);
-                }}
+                onPositionChange={(pos: MapPosition) => { setLocLat(pos.lat); setLocLng(pos.lng); setMapSelected(true); }}
                 height="280px"
               />
-              {locLat != null && locLng != null && (
-                <div className="flex flex-wrap gap-2 text-xs">
-                  <a className="rounded-lg bg-blue px-3 py-1.5 font-medium text-white"
-                    href={`https://neshan.org/maps/@${locLat},${locLng},15.0z`}
-                    target="_blank" rel="noreferrer">باز کردن در نشان</a>
-                  <a className="rounded-lg border border-border bg-white px-3 py-1.5 font-medium text-blue"
-                    href={`https://www.google.com/maps/search/?api=1&query=${locLat},${locLng}`}
-                    target="_blank" rel="noreferrer">باز کردن در Google Maps</a>
-                </div>
-              )}
             </div>
           )}
         </Card>
@@ -523,90 +469,62 @@ export default function ProfileCompletePage() {
                 {featuredRootCategories.map((c) => {
                   const on = selectedRootIds.includes(c.id);
                   return (
-                    <button
-                      key={c.id}
-                      type="button"
-                      onClick={() => toggleRootCategory(c.id)}
+                    <button key={c.id} type="button" onClick={() => toggleRootCategory(c.id)}
                       className={`rounded-2xl border px-3 py-3.5 text-right text-sm font-medium transition ${
-                        on
-                          ? 'border-[#0B2C4A] bg-[#0B2C4A] text-white'
-                          : 'border-gray-200 bg-white text-gray-800 hover:border-[#0B2C4A]/40'
-                      }`}
-                    >
-                      {on ? '✓ ' : ''}
-                      {c.name}
-                    </button>
+                        on ? 'border-[#0B2C4A] bg-[#0B2C4A] text-white' : 'border-gray-200 bg-white text-gray-800 hover:border-[#0B2C4A]/40'
+                      }`}>{on ? '✓ ' : ''}{c.name}</button>
                   );
                 })}
-                <button
-                  type="button"
-                  onClick={() => setSpecialtyMoreOpen((v) => !v)}
-                  className="rounded-2xl border border-dashed border-gray-200 px-3 py-3.5 text-sm font-medium text-gray-600 hover:border-[#0B2C4A]/40"
-                >
-                  بیشتر…
-                </button>
+                <button type="button" onClick={() => setSpecialtyMoreOpen((v) => !v)}
+                  className="rounded-2xl border border-dashed border-gray-200 px-3 py-3.5 text-sm font-medium text-gray-600">بیشتر…</button>
               </div>
               {specialtyMoreOpen && (
                 <div className="space-y-2">
-                  <Input
-                    value={specialtySearch}
-                    onChange={(e) => setSpecialtySearch(e.target.value)}
-                    placeholder="جستجوی تخصص…"
-                    autoFocus
-                  />
+                  <Input value={specialtySearch} onChange={(e) => setSpecialtySearch(e.target.value)} placeholder="جستجوی تخصص…" autoFocus />
                   {specialtySearch.trim() && (
                     <ul className="max-h-52 overflow-y-auto rounded-2xl border border-gray-200 bg-white p-1">
                       {specialtySearchResults.map((c) => {
                         const on = selectedRootIds.includes(c.id);
                         return (
                           <li key={c.id}>
-                            <button
-                              type="button"
-                              onClick={() => toggleRootCategory(c.id)}
-                              className={`w-full rounded-xl px-3 py-2.5 text-right text-sm ${
-                                on ? 'bg-[#0B2C4A] text-white' : 'hover:bg-[#F3F6F9]'
-                              }`}
-                            >
-                              {on ? '✓ ' : ''}
-                              {c.name}
+                            <button type="button" onClick={() => toggleRootCategory(c.id)}
+                              className={`w-full rounded-xl px-3 py-2.5 text-right text-sm ${on ? 'bg-[#0B2C4A] text-white' : 'hover:bg-[#F3F6F9]'}`}>
+                              {on ? '✓ ' : ''}{c.name}
                             </button>
                           </li>
                         );
                       })}
                       {!specialtySearchResults.some((c) => c.name === specialtySearch.trim()) && (
                         <li>
-                          <button
-                            type="button"
-                            disabled={saving}
+                          <button type="button" disabled={saving}
                             onClick={async () => {
                               setSaving(true); setError(null);
                               try {
                                 const created = await createCategoryNode({ name: specialtySearch.trim() });
                                 setRootCategories((prev) => [...prev, created]);
-                                setSelectedRootIds((prev) => Array.from(new Set([...prev, created.id])));
+                                const nextIds = Array.from(new Set([...selectedRootIds, created.id]));
+                                setSelectedRootIds(nextIds);
+                                const data = await setMySelectedCategories(nextIds);
+                                setPro(data); setCompletion(data.completion || null);
                                 setSpecialtySearch('');
-                                setMsg(`تخصص «${created.name}» اضافه شد`);
+                                setMsg(`تخصص «${created.name}» اضافه و ذخیره شد`);
                               } catch (e) {
                                 setError(friendlyApiError(e));
                               } finally {
                                 setSaving(false);
                               }
                             }}
-                            className="w-full rounded-xl px-3 py-2.5 text-right text-sm font-semibold text-[#0B2C4A] hover:bg-[#F3F6F9]"
-                          >
+                            className="w-full rounded-xl px-3 py-2.5 text-right text-sm font-semibold text-[#0B2C4A] hover:bg-[#F3F6F9]">
                             ＋ افزودن «{specialtySearch.trim()}»
                           </button>
                         </li>
-                      )}
-                      {specialtySearchResults.length === 0 && (
-                        <li className="px-3 py-1 text-xs text-gray-400">در فهرست نبود — می‌توانید بسازید</li>
                       )}
                     </ul>
                   )}
                 </div>
               )}
               {selectedRootIds.length > 0 && (
-                <p className="text-xs text-[#0B2C4A]">{selectedRootIds.length} تخصص انتخاب شده</p>
+                <p className="text-xs text-[#0B2C4A]">{selectedRootIds.length} تخصص انتخاب شده (ذخیره در سرور)</p>
               )}
             </>
           )}
@@ -617,16 +535,10 @@ export default function ProfileCompletePage() {
           <h2 className="font-semibold">ساعات کاری</h2>
           <div className="flex flex-wrap gap-2">
             {WEEK_DAYS.map((d) => (
-              <button
-                key={d.value}
-                type="button"
-                onClick={() => toggleHourDay(d.value)}
+              <button key={d.value} type="button" onClick={() => toggleHourDay(d.value)}
                 className={`rounded-full px-3 py-1.5 text-sm border ${
-                  hourDays.includes(d.value)
-                    ? 'border-coral bg-coral text-white'
-                    : 'border-border bg-white text-gray'
-                }`}
-              >{d.label}</button>
+                  hourDays.includes(d.value) ? 'border-coral bg-coral text-white' : 'border-border bg-white text-gray'
+                }`}>{d.label}</button>
             ))}
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -674,9 +586,7 @@ export default function ProfileCompletePage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <Card className="max-w-md space-y-4">
             <h3 className="text-lg font-bold">تأیید انتشار</h3>
-            <p className="text-sm text-gray">
-              پروفایل شما آماده انتشار است. با تأیید، اطلاعات پروفایل برای کاربران عمومی سایت قابل مشاهده خواهد بود.
-            </p>
+            <p className="text-sm text-gray">پروفایل شما آماده انتشار است.</p>
             <div className="flex justify-end gap-2">
               <Button variant="outline" size="sm" onClick={() => setConfirmPublish(false)}>انصراف</Button>
               <Button size="sm" loading={publishing} onClick={onPublish}>تأیید و انتشار</Button>

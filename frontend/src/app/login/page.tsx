@@ -10,10 +10,10 @@ import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 
 function LoginForm() {
-  const { loginWithPassword, isAuthenticated } = useAuth();
+  const { loginWithPassword, isAuthenticated, user, hasRole } = useAuth();
   const router = useRouter();
   const search = useSearchParams();
-  const next = search.get('next') || '/panel';
+  const nextParam = search.get('next');
 
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
@@ -21,7 +21,13 @@ function LoginForm() {
   const [loading, setLoading] = useState(false);
 
   if (isAuthenticated) {
-    router.replace(next);
+    let dest = nextParam || '/panel';
+    if (hasRole('admin')) dest = '/admin';
+    else if (hasRole('professional') && !hasRole('customer')) dest = '/zibagar';
+    else dest = '/panel';
+    // Prevent professional-only users from landing on customer panel via next=
+    if (dest.startsWith('/panel') && hasRole('professional') && !hasRole('customer')) dest = '/zibagar';
+    router.replace(dest);
   }
 
   async function onSubmit(e: FormEvent) {
@@ -30,7 +36,39 @@ function LoginForm() {
     setLoading(true);
     try {
       await loginWithPassword(phone.trim(), password);
-      router.replace(next);
+      // Re-fetch roles from auth after login is applied in context on next paint;
+      // use the login response path: resolve from storage via a second me if needed.
+      // Prefer nextParam only when role-compatible.
+      let dest = nextParam || '/panel';
+      // We just logged in — roles are on the user object after loginWithPassword sets context.
+      // loginWithPassword already set user; but React state may not flush yet — use me roles from API via context after await.
+      // Safest: call hasRole after await (context updated synchronously in loginWithPassword).
+      const roles: string[] = [];
+      // read from freshly set context by re-checking is not available; instead parse from a lightweight approach:
+      // loginWithPassword sets user in state; for redirect we re-call me via getAccessToken is heavy.
+      // Simpler: after login, always let the isAuthenticated block above handle on re-render.
+      // But router.replace here is needed for immediate navigate:
+      try {
+        const { getAccessToken } = await import('@/lib/auth-storage');
+        const { authApi } = await import('@/lib/auth-api');
+        const token = getAccessToken();
+        if (token) {
+          const me = await authApi.me(token);
+          const r = me.roles || [];
+          roles.push(...r);
+        }
+      } catch { /* ignore */ }
+      if (roles.includes('admin')) dest = '/admin';
+      else if (roles.includes('professional') && !roles.includes('customer')) dest = '/zibagar';
+      else dest = nextParam || '/panel';
+      // Prevent professional-only users from landing on customer panel via next=
+      if (dest.startsWith('/panel') && roles.includes('professional') && !roles.includes('customer')) {
+        dest = '/zibagar';
+      }
+      if (dest.startsWith('/zibagar') && roles.includes('customer') && !roles.includes('professional')) {
+        dest = '/panel';
+      }
+      router.replace(dest);
     } catch (err) {
       const msg =
         err instanceof ApiError
