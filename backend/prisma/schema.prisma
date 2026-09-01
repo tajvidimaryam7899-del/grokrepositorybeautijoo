@@ -232,6 +232,8 @@ model Professional {
   publishedAt     DateTime?          @map("published_at") @db.Timestamptz
   coverImageUrl   String?            @map("cover_image_url") @db.VarChar(512)
   logoUrl         String?            @map("logo_url") @db.VarChar(512)
+  /// Root category IDs the pro selected (wizard / my specialties). JSON string[]
+  selectedCategoryIds Json?            @map("selected_category_ids")
   createdAt       DateTime           @default(now()) @map("created_at") @db.Timestamptz
   updatedAt       DateTime           @updatedAt @map("updated_at") @db.Timestamptz
   user                 User                  @relation(fields: [userId], references: [id], onDelete: Cascade)

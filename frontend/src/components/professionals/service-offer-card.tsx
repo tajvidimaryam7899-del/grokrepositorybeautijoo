@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import Link from 'next/link';
 import type { ProfessionalServiceItem } from '@/types/public';
 import { formatPrice } from '@/lib/utils';
 
@@ -8,7 +9,7 @@ function isVideo(mime?: string) {
   return (mime || '').startsWith('video/');
 }
 
-export function ServiceOfferCard({ ps }: { ps: ProfessionalServiceItem }) {
+export function ServiceOfferCard({ ps, slug }: { ps: ProfessionalServiceItem; slug?: string }) {
   const addOns = ps.addOns || [];
   const media = ps.mediaAssets || [];
   const [selected, setSelected] = useState<string[]>([]);
@@ -74,6 +75,15 @@ export function ServiceOfferCard({ ps }: { ps: ProfessionalServiceItem }) {
             ),
           )}
         </div>
+      )}
+
+      {slug && (
+        <Link
+          href={`/booking/${slug}?serviceId=${encodeURIComponent(ps.service?.id || '')}`}
+          className="mt-3 inline-flex h-10 w-full items-center justify-center rounded-xl bg-coral text-sm font-medium text-white"
+        >
+          رزرو همین مدل
+        </Link>
       )}
 
       {addOns.length > 0 && (

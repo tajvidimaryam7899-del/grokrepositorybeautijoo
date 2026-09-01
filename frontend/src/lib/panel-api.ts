@@ -55,6 +55,7 @@ export type OwnProfessional = {
   } | null } | null;
   locations?: Array<{ isPrimary?: boolean; location: { id: string; name: string; address: string; city: string; province?: string | null; latitude?: number | null; longitude?: number | null } }>;
   logoUrl?: string | null;
+  selectedCategoryIds?: string[] | null;
   professionalServices?: ProfessionalServiceItem[];
   workingHours?: WorkingHourItem[];
   completion?: ProfileCompletion;
@@ -208,6 +209,10 @@ export async function fetchMyPreview() {
 export async function updateMyProfessional(payload: Record<string, unknown>) {
   return apiClient.patch<OwnProfessional>('/professionals/me', payload);
 }
+export async function setMySelectedCategories(categoryIds: string[]) {
+  return apiClient.patch<OwnProfessional>('/professionals/me', { selectedCategoryIds: categoryIds });
+}
+
 export async function publishMyProfessional() {
   return apiClient.post<OwnProfessional>('/professionals/me/publish');
 }
