@@ -126,6 +126,7 @@ export class ProfessionalsService {
     title?: string; bio?: string; coverImageUrl?: string; logoUrl?: string;
     firstName?: string; lastName?: string; displayName?: string;
     avatarUrl?: string; profileBio?: string;
+    selectedCategoryIds?: string[];
   }) {
     const pro = await this.prisma.professional.findUnique({ where: { userId } });
     if (!pro) throw new NotFoundException('\u067e\u0631\u0648\u0641\u0627\u06cc\u0644 \u0632\u06cc\u0628\u0627\u06af\u0631 \u06cc\u0627\u0641\u062a \u0646\u0634\u062f');
@@ -138,6 +139,9 @@ export class ProfessionalsService {
     }
     if (data.bio !== undefined) proData.bio = data.bio.trim() || null;
     if (data.coverImageUrl !== undefined) proData.coverImageUrl = data.coverImageUrl.trim() || null;
+    if (data.selectedCategoryIds !== undefined) {
+      proData.selectedCategoryIds = data.selectedCategoryIds as Prisma.InputJsonValue;
+    }
     if (data.logoUrl !== undefined) proData.logoUrl = data.logoUrl.trim() || null;
 
     const profileData: Prisma.ProfileUpdateInput = {};
@@ -263,6 +267,8 @@ export class ProfessionalsService {
           service: { include: { category: true } },
           mediaAssets: { orderBy: { sortOrder: 'asc' as const } },
           addOns: { where: { isActive: true }, orderBy: { sortOrder: 'asc' as const } },
+          priceRules: { where: { isActive: true }, orderBy: { sortOrder: 'asc' as const } },
+          durationRules: { where: { isActive: true }, orderBy: { sortOrder: 'asc' as const } },
         },
       },
       workingHours: { where: { isActive: true }, include: { breaks: true } },
