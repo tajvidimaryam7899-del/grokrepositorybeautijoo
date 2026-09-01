@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { IsOptional, IsString, MinLength, MaxLength } from 'class-validator';
+import { IsArray, IsOptional, IsString, IsUUID, MinLength, MaxLength } from 'class-validator';
 import { ProfessionalsService } from './professionals.service';
 import { Public } from '../common/decorators/public.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -21,6 +21,8 @@ class UpdateProDto {
   @IsOptional() @IsString() @MaxLength(120) displayName?: string;
   @IsOptional() @IsString() @MaxLength(512) avatarUrl?: string;
   @IsOptional() @IsString() @MaxLength(5000) profileBio?: string;
+  /** Root category UUIDs the pro selected (wizard / specialties) */
+  @IsOptional() @IsArray() @IsUUID('4', { each: true }) preferredRootCategoryIds?: string[];
 }
 
 @ApiTags('professionals')
