@@ -108,28 +108,29 @@ export function BookingWizard({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [booking, setBooking] = useState<BookingRecord | null>(null);
   const [paymentInfo, setPaymentInfo] = useState<string | null>(null);
+  const [showAddOns, setShowAddOns] = useState(false);
 
   const selected = useMemo(
     () => services.find((s) => s.serviceId === serviceId) || null,
     [services, serviceId],
   );
 
-  // When service changes, reset rules to first available if needed
+  // When service changes, default to cheapest model
   useEffect(() => {
     if (!selected) return;
-    const pr = selected.priceRules || [];
+    const pr = [...(selected.priceRules || [])].sort((a, b) => a.price - b.price);
     const dr = selected.durationRules || [];
     if (pr.length) {
       if (!priceRuleId || !pr.some((r) => r.id === priceRuleId)) {
-        setPriceRuleId(pr[0].id);
-        const match = dr.find((d) => d.label === pr[0].label);
+        const cheapest = pr[0];
+        setPriceRuleId(cheapest.id);
+        const match = dr.find((d) => d.label === cheapest.label);
         setDurationRuleId(match?.id || dr[0]?.id || null);
       }
     } else {
       setPriceRuleId(null);
     }
     if (!dr.length) setDurationRuleId(null);
-    // Drop add-ons that don't belong to this service
     const valid = new Set((selected.addOns || []).map((a) => a.id));
     setSelectedAddOnIds((prev) => prev.filter((id) => valid.has(id)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -363,7 +364,7 @@ export function BookingWizard({
 
           {selected && (selected.priceRules || []).length > 0 && (
             <div className="space-y-2 border-t border-border pt-3">
-              <p className="text-sm font-medium">انتخاب مدل</p>
+              <p className="text-sm font-medium">انتخاب تنوع</p>
               <ul className="space-y-1.5">
                 {(selected.priceRules || []).map((r) => {
                   const on = priceRuleId === r.id;
@@ -388,34 +389,49 @@ export function BookingWizard({
 
           {selected && (selected.addOns || []).length > 0 && (
             <div className="space-y-2 border-t border-border pt-3">
-              <p className="text-sm font-medium">گزینه‌های جانبی</p>
-              <ul className="space-y-1.5">
-                {(selected.addOns || []).map((a) => {
-                  const on = selectedAddOnIds.includes(a.id);
-                  return (
-                    <li key={a.id}>
-                      <button
-                        type="button"
-                        onClick={() => toggleAddOn(a.id)}
-                        className={`flex w-full items-center justify-between rounded-xl border px-3 py-2 text-right text-sm ${
-                          on ? 'border-coral bg-coral/5' : 'border-border'
-                        }`}
-                      >
-                        <span>
-                          {on ? '✓ ' : ''}
-                          {a.name}
-                          {a.extraDurationMin ? ` (+${a.extraDurationMin}د)` : ''}
-                        </span>
-                        <span className="font-medium">{formatPrice(a.price)}</span>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-              <div className="flex justify-between rounded-xl bg-gray-light/60 px-3 py-2 text-sm">
-                <span className="text-gray">جمع · {serviceDuration} دقیقه</span>
-                <span className="font-bold text-coral">{formatPrice(displayPrice)}</span>
-              </div>
+              {!showAddOns ? (
+                <button
+                  type="button"
+                  onClick={() => setShowAddOns(true)}
+                  className="text-sm font-medium text-[#0B2C4A]"
+                >
+                  ＋ گزینه‌های اضافی
+                </button>
+              ) : (
+                <>
+                  <p className="text-sm font-medium">گزینه‌های اضافی</p>
+                  <ul className="space-y-1.5">
+                    {(selected.addOns || []).map((a) => {
+                      const on = selectedAddOnIds.includes(a.id);
+                      return (
+                        <li key={a.id}>
+                          <button
+                            type="button"
+                            onClick={() => toggleAddOn(a.id)}
+                            className={`flex w-full items-center justify-between rounded-xl border px-3 py-2 text-right text-sm ${
+                              on ? 'border-[#0B2C4A] bg-[#0B2C4A]/5' : 'border-border'
+                            }`}
+                          >
+                            <span>
+                              {on ? '☑ ' : '☐ '}
+                              {a.name}
+                              {a.extraDurationMin ? ` (+${a.extraDurationMin}د)` : ''}
+                            </span>
+                            <span className="font-medium">{formatPrice(a.price)}</span>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  <button type="button" className="text-xs text-gray-500" onClick={() => { setShowAddOns(false); setSelectedAddOnIds([]); }}>
+                    رد کردن
+                  </button>
+                  <div className="flex justify-between rounded-xl bg-gray-light/60 px-3 py-2 text-sm">
+                    <span className="text-gray">جمع · {serviceDuration} دقیقه</span>
+                    <span className="font-bold text-[#0B2C4A]">{formatPrice(displayPrice)}</span>
+                  </div>
+                </>
+              )}
             </div>
           )}
 
@@ -515,10 +531,10 @@ export function BookingWizard({
             <div className="flex justify-between gap-2"><dt className="text-gray">زیباگر</dt><dd className="font-medium">{professional.name}</dd></div>
             <div className="flex justify-between gap-2"><dt className="text-gray">خدمت</dt><dd className="font-medium">{selected.name}</dd></div>
             {selectedRuleLabel && (
-              <div className="flex justify-between gap-2"><dt className="text-gray">مدل</dt><dd className="font-medium">{selectedRuleLabel}</dd></div>
+              <div className="flex justify-between gap-2"><dt className="text-gray">تنوع</dt><dd className="font-medium">{selectedRuleLabel}</dd></div>
             )}
             {selectedAddOnNames.length > 0 && (
-              <div className="flex justify-between gap-2"><dt className="text-gray">افزودنی</dt><dd className="font-medium">{selectedAddOnNames.join('، ')}</dd></div>
+              <div className="flex justify-between gap-2"><dt className="text-gray">گزینه اضافی</dt><dd className="font-medium">{selectedAddOnNames.join('، ')}</dd></div>
             )}
             <div className="flex justify-between gap-2"><dt className="text-gray">تاریخ</dt><dd dir="ltr">{date}</dd></div>
             <div className="flex justify-between gap-2"><dt className="text-gray">ساعت</dt><dd dir="ltr">{slotStart}</dd></div>
@@ -547,7 +563,7 @@ export function BookingWizard({
           <h2 className="text-xl font-bold text-coral">رزرو ثبت شد</h2>
           <p className="text-sm text-gray">وضعیت سرور: <strong>{persianBookingStatus(booking.status)}</strong></p>
           <p className="text-sm font-bold text-coral">{formatPrice(booking.totalPrice)}</p>
-          <p className="text-xs text-gray" dir="ltr">ID: {booking.id}</p>
+          
           {paymentInfo && <p className="rounded-xl bg-gray-light px-3 py-3 text-sm text-gray">{paymentInfo}</p>}
           <p className="text-xs text-gray">موفقیت پرداخت فقط پس از تأیید سرور/درگاه — هرگز توسط کلاینت ادعا نمی‌شود.</p>
           <div className="flex flex-col gap-2 sm:flex-row sm:justify-center">
