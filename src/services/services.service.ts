@@ -261,6 +261,41 @@ export class ServicesService {
     });
   }
 
+  /**
+   * Rename catalog Service linked to this offer — only if this pro is the sole offerer.
+   * Category hierarchy unchanged; booking snapshots remain historical.
+   */
+  async renameMyService(userId: string, professionalServiceId: string, name: string) {
+    const { pro, ps } = await this.requireOwnPs(userId, professionalServiceId);
+    const trimmed = name?.trim();
+    if (!trimmed) throw new BadRequestException('نام تخصص الزامی است');
+
+    const others = await this.prisma.professionalService.count({
+      where: { serviceId: ps.serviceId, professionalId: { not: pro.id } },
+    });
+    if (others > 0) {
+      throw new BadRequestException(
+        'این تخصص در کاتالوگ مشترک است و نام آن از اینجا قابل تغییر نیست',
+      );
+    }
+
+    await this.prisma.service.update({
+      where: { id: ps.serviceId },
+      data: { name: trimmed.slice(0, 150) },
+    });
+
+    return this.prisma.professionalService.findUnique({
+      where: { id: professionalServiceId },
+      include: {
+        service: { include: { category: true } },
+        priceRules: { where: { isActive: true }, orderBy: { sortOrder: 'asc' } },
+        durationRules: { where: { isActive: true }, orderBy: { sortOrder: 'asc' } },
+        addOns: { where: { isActive: true }, orderBy: { sortOrder: 'asc' } },
+        mediaAssets: { orderBy: { sortOrder: 'asc' } },
+      },
+    });
+  }
+
   async deactivateMyService(userId: string, id: string) {
     const pro = await this.professionals.requireOwnProfessional(userId);
     const ps = await this.prisma.professionalService.findFirst({

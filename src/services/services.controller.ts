@@ -42,6 +42,10 @@ class PatchProServiceDto {
   @IsOptional() @IsBoolean() isActive?: boolean;
 }
 
+class RenameMyServiceDto {
+  @IsString() @MinLength(1) name!: string;
+}
+
 class CreateCategoryNodeDto {
   @IsString() @MinLength(1) name!: string;
   @IsOptional() @IsUUID() parentId?: string;
@@ -156,6 +160,18 @@ export class ServicesController {
     @Body() dto: PatchProServiceDto,
   ) {
     return this.service.updateProfessionalService(userId, id, dto);
+  }
+
+  /** Rename specialty when this pro is the sole offerer (catalog hierarchy unchanged). */
+  @ApiBearerAuth()
+  @Roles('professional', 'admin')
+  @Patch('professionals/me/services/:id/name')
+  renameMyService(
+    @CurrentUser('id') userId: string,
+    @Param('id') id: string,
+    @Body() dto: RenameMyServiceDto,
+  ) {
+    return this.service.renameMyService(userId, id, dto.name);
   }
 
   @ApiBearerAuth()
