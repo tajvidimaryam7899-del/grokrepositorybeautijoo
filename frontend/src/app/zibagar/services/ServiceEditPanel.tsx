@@ -176,7 +176,7 @@ export function ServiceEditPanel(props: ServiceEditPanelProps) {
               onClick={() => setShowModels(!showModels)}
               className={`mb-2 text-sm font-medium ${navy.title}`}
             >
-              {showModels ? '▼' : '▶'} تنوع قیمت / زمان
+              {showModels ? '▼' : '▶'} زیرمجموعه‌ها
             </button>
             {showModels && (
               <div className="space-y-3">
@@ -233,7 +233,7 @@ export function ServiceEditPanel(props: ServiceEditPanelProps) {
                 )}
                 <div className="grid gap-2 sm:grid-cols-3">
                   <Input
-                    placeholder="نام تنوع"
+                    placeholder="نام زیرمجموعه"
                     value={ruleLabel}
                     onChange={(e) => setRuleLabel(e.target.value)}
                   />
@@ -257,7 +257,7 @@ export function ServiceEditPanel(props: ServiceEditPanelProps) {
                   onClick={onAddModel}
                   className={`rounded-xl px-4 py-2 text-sm font-medium ${navy.btn} disabled:opacity-50`}
                 >
-                  افزودن تنوع
+                  افزودن زیرمجموعه
                 </button>
               </div>
             )}

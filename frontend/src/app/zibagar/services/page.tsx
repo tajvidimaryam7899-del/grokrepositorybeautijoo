@@ -83,6 +83,12 @@ export default function ZibagarServicesPage() {
   const [uploadErr, setUploadErr] = useState<string | null>(null);
   const [addSearch, setAddSearch] = useState('');
 
+  const [showCreateSpecialty, setShowCreateSpecialty] = useState(false);
+  const [newSpecName, setNewSpecName] = useState('');
+  const [newSpecPrice, setNewSpecPrice] = useState(0);
+  const [newSpecDuration, setNewSpecDuration] = useState(60);
+  const [newSpecDesc, setNewSpecDesc] = useState('');
+
   const roots = useMemo(() => (tree || []).filter((c) => !c.parentId), [tree]);
   const myRoots = useMemo(() => roots.filter((r) => selectedRootIds.includes(r.id)), [roots, selectedRootIds]);
   const searchIndex = useMemo(() => flattenSearch(tree), [tree]);
@@ -313,6 +319,50 @@ export default function ZibagarServicesPage() {
     }
   }
 
+  async function createSpecialtyDirect() {
+    if (!newSpecName.trim()) return;
+    setBusy(true);
+    setError(null);
+    try {
+      let categoryId = selectedRootIds[0] || roots[0]?.id || null;
+      if (!categoryId) {
+        const cat = await createCategoryNode({ name: newSpecName.trim() });
+        categoryId = cat.id;
+        await persistRoots([cat.id]);
+      }
+      const created = await createServiceNode({
+        name: newSpecName.trim(),
+        categoryId,
+        description: newSpecDesc.trim() || undefined,
+      });
+      await upsertMyService({
+        serviceId: created.id,
+        price: newSpecPrice || 0,
+        durationMin: newSpecDuration > 0 ? newSpecDuration : 60,
+        description: newSpecDesc.trim() || undefined,
+        isActive: true,
+      });
+      setNewSpecName('');
+      setNewSpecPrice(0);
+      setNewSpecDuration(60);
+      setNewSpecDesc('');
+      setShowCreateSpecialty(false);
+      setMsg(`تخصص «${created.name}» اضافه شد`);
+      await load();
+      const refreshed = await fetchMyServices();
+      setMine(refreshed || []);
+      const ps = (refreshed || []).find((m) => m.serviceId === created.id);
+      if (ps) {
+        setSelectedPsId(ps.id);
+        setMode('edit');
+      }
+    } catch (e) {
+      setError(friendlyApiError(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function onSavePs() {
     if (!selectedPs) return;
     setBusy(true);
@@ -357,7 +407,7 @@ export default function ZibagarServicesPage() {
       setRuleLabel(''); setRulePrice(0); setRuleDuration(60);
       setPriceRules(await fetchMyPriceRules(selectedPs.id));
       setDurationRules(await fetchMyDurationRules(selectedPs.id));
-      setMsg('تنوع اضافه شد');
+      setMsg('زیرمجموعه اضافه شد');
     } catch (e) {
       setError(friendlyApiError(e));
     } finally {
@@ -431,7 +481,7 @@ export default function ZibagarServicesPage() {
       <div className="flex items-center justify-between gap-2">
         <div>
           <h1 className={`text-lg font-bold ${navy.title}`}>
-            {mode === 'home' && 'تخصص‌ها و خدمات'}
+            {mode === 'home' && 'تخصص‌های من'}
             {mode === 'specialty' && (activeRoot?.name || 'تخصص')}
             {mode === 'edit' && 'ویرایش خدمت'}
             {mode === 'add' && 'افزودن تخصص'}
@@ -446,30 +496,102 @@ export default function ZibagarServicesPage() {
 
       {mode === 'home' && (
         <div className="space-y-4">
-          <p className="text-sm text-gray-500">تخصص‌های خود را انتخاب یا بسازید.</p>
-          <div className="grid grid-cols-2 gap-2">
-            {myRoots.map((r) => (
-              <button key={r.id} type="button" onClick={() => { setActiveRootId(r.id); setPath([]); setMode('specialty'); }} className={`rounded-2xl border ${navy.border} bg-white px-3 py-4 text-right text-sm font-medium`}>{r.name}</button>
-            ))}
-            <button type="button" onClick={() => setMode('add')} className={`rounded-2xl border border-dashed ${navy.border} px-3 py-4 text-sm text-gray-500`}>+ افزودن تخصص</button>
+          <div className="flex items-start justify-between gap-3">
+            <p className="text-sm text-gray-500">تخصص‌ها را مدیریت کنید؛ برای هرکدام در صورت نیاز زیرمجموعه با قیمت و مدت جداگانه بسازید.</p>
+            <button type="button" onClick={() => setShowCreateSpecialty((v) => !v)} className={`shrink-0 rounded-xl px-4 py-2 text-sm font-medium ${navy.btn}`}>+ افزودن تخصص</button>
           </div>
-          {FEATURED_ROOT_NAMES.length > 0 && (
-            <div>
-              <p className="mb-2 text-xs font-semibold text-gray-400">پیشنهادی</p>
+
+          {showCreateSpecialty && (
+            <div className={`space-y-3 rounded-2xl border ${navy.border} bg-white p-4`}>
+              <p className={`text-sm font-semibold ${navy.title}`}>تخصص جدید</p>
+              <Input autoFocus placeholder="نام تخصص" value={newSpecName} onChange={(e) => setNewSpecName(e.target.value)} className="text-right" />
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="mb-0.5 block text-[11px] text-gray-500">قیمت (تومان)</label>
+                  <Input inputMode="numeric" placeholder="۰" value={newSpecPrice ? formatPriceDigits(newSpecPrice) : ''} onChange={(e) => setNewSpecPrice(parsePriceInput(e.target.value))} className="text-right" />
+                </div>
+                <div>
+                  <label className="mb-0.5 block text-[11px] text-gray-500">مدت (دقیقه)</label>
+                  <Input type="number" min={5} placeholder="۶۰" value={newSpecDuration || ''} onChange={(e) => setNewSpecDuration(Number(e.target.value) || 60)} className="text-right" />
+                </div>
+              </div>
+              <Input placeholder="توضیحات (اختیاری)" value={newSpecDesc} onChange={(e) => setNewSpecDesc(e.target.value)} className="text-right" />
+              <div className="flex gap-2">
+                <button type="button" disabled={busy || !newSpecName.trim()} onClick={() => void createSpecialtyDirect()} className={`rounded-xl px-4 py-2 text-sm font-medium ${navy.btn} disabled:opacity-50`}>ذخیره تخصص</button>
+                <button type="button" className="rounded-xl px-3 py-2 text-sm text-gray-500" onClick={() => { setShowCreateSpecialty(false); setNewSpecName(''); setNewSpecPrice(0); setNewSpecDuration(60); setNewSpecDesc(''); }}>انصراف</button>
+              </div>
+            </div>
+          )}
+
+          {mine.length === 0 && !showCreateSpecialty ? (
+            <div className="rounded-2xl border border-dashed border-gray-300 bg-white px-4 py-10 text-center">
+              <p className={`text-sm font-medium ${navy.title}`}>هنوز تخصصی اضافه نکرده‌اید</p>
+              <p className="mt-1 text-xs text-gray-500">اولین تخصص خود را با قیمت و مدت ثبت کنید.</p>
+              <button type="button" onClick={() => setShowCreateSpecialty(true)} className={`mt-4 rounded-xl px-5 py-2.5 text-sm font-medium ${navy.btn}`}>+ افزودن تخصص</button>
+            </div>
+          ) : mine.length > 0 ? (
+            <div className={`overflow-hidden rounded-2xl border ${navy.border} bg-white`}>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[340px] text-right text-sm">
+                  <thead>
+                    <tr className="bg-[#F3F4F6] text-[11px] font-semibold tracking-wide text-gray-500">
+                      <th className="px-3 py-2.5">تخصص</th>
+                      <th className="px-3 py-2.5 whitespace-nowrap">قیمت</th>
+                      <th className="px-3 py-2.5 whitespace-nowrap">مدت</th>
+                      <th className="px-3 py-2.5">زیرمجموعه</th>
+                      <th className="px-3 py-2.5">وضعیت</th>
+                      <th className="px-3 py-2.5">عملیات</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {mine.map((ps, idx) => {
+                      const st = statusOf(ps);
+                      const subCount = (ps.priceRules || []).filter((r) => r.isActive !== false).length;
+                      const rowBg = idx % 2 === 0 ? 'bg-white' : 'bg-[#F9FAFB]';
+                      return (
+                        <tr key={ps.id} className={`border-t border-gray-100 ${rowBg}`}>
+                          <td className="px-3 py-2.5 font-medium text-[#0B2C4A]">
+                            <button type="button" className="text-right hover:underline" onClick={() => { setSelectedPsId(ps.id); setMode('edit'); }}>{serviceLabel(ps)}</button>
+                          </td>
+                          <td className="px-3 py-2.5 tabular-nums whitespace-nowrap text-gray-700">{(ps.price ?? 0) > 0 ? formatPrice(ps.price) : '—'}</td>
+                          <td className="px-3 py-2.5 tabular-nums whitespace-nowrap text-gray-600">{(ps.durationMin ?? 0) > 0 ? `${ps.durationMin} د` : '—'}</td>
+                          <td className="px-3 py-2.5 tabular-nums text-gray-600">{subCount > 0 ? subCount : '—'}</td>
+                          <td className="px-3 py-2.5">
+                            <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-medium ${st === 'ready' ? 'bg-[#E7F1FF] text-[#2D6CDF]' : 'bg-[#FFE6E2] text-[#FF6F61]'}`}>
+                              {ps.isActive === false ? 'غیرفعال' : st === 'ready' ? 'آماده' : 'ناقص'}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2.5">
+                            <div className="flex items-center gap-2">
+                              <button type="button" className="text-xs font-medium text-[#2D6CDF] hover:underline" onClick={() => { setSelectedPsId(ps.id); setMode('edit'); }}>ویرایش</button>
+                              <button type="button" className="text-xs text-red-600 hover:underline" onClick={async () => { if (!window.confirm(`حذف «${serviceLabel(ps)}»؟`)) return; setBusy(true); try { await deactivateMyService(ps.id); setMsg('حذف شد'); await load(); } catch (e) { setError(friendlyApiError(e)); } finally { setBusy(false); } }}>حذف</button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : null}
+
+          {myRoots.length > 0 && (
+            <div className="pt-2">
+              <p className="mb-2 text-xs font-semibold text-gray-400">دسته‌بندی‌ها</p>
               <div className="flex flex-wrap gap-2">
-                {roots.filter((r) => FEATURED_ROOT_NAMES.some((n) => r.name.includes(n))).filter((r) => !selectedRootIds.includes(r.id)).slice(0, 8).map((r) => (
-                  <button key={r.id} type="button" disabled={busy} onClick={() => void addRootSpecialty(r.id)} className="rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs">{r.name}</button>
+                {myRoots.map((r) => (
+                  <button key={r.id} type="button" onClick={() => { setActiveRootId(r.id); setPath([]); setMode('specialty'); }} className="rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-700 hover:border-[#0B2C4A]/40">{r.name}</button>
                 ))}
               </div>
             </div>
           )}
-          <button type="button" onClick={() => setMode('add')} className={`w-full rounded-xl py-2.5 text-sm font-medium ${navy.btn}`}>+ افزودن تخصص</button>
         </div>
       )}
 
       {mode === 'add' && (
         <div className="space-y-3">
-          <Input value={addSearch} onChange={(e) => setAddSearch(e.target.value)} placeholder="نام تخصص..." className="w-full" />
+          <Input value={addSearch} onChange={(e) => setAddSearch(e.target.value)} placeholder="نام دسته..." className="w-full" />
           {addSearch.trim() && (
             <div className="relative">
               <ul className={`max-h-60 overflow-y-auto rounded-2xl border ${navy.border} bg-white p-1`}>

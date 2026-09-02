@@ -115,7 +115,6 @@ export function BookingWizard({
     [services, serviceId],
   );
 
-  // When service changes, default to cheapest model
   useEffect(() => {
     if (!selected) return;
     const pr = [...(selected.priceRules || [])].sort((a, b) => a.price - b.price);
@@ -214,6 +213,8 @@ export function BookingWizard({
       const match = (selected.durationRules || []).find((d) => d.label === rule.label);
       if (match) setDurationRuleId(match.id);
     }
+    // Clicking a sub-item advances to the next booking step (no extra «انتخاب» button)
+    setStep('datetime');
   }
 
   function goDatetime() {
@@ -343,7 +344,13 @@ export function BookingWizard({
               <li key={s.serviceId}>
                 <button
                   type="button"
-                  onClick={() => setServiceId(s.serviceId)}
+                  onClick={() => {
+                    setServiceId(s.serviceId);
+                    // No sub-items: go straight to datetime
+                    if (!(s.priceRules || []).length) {
+                      setStep('datetime');
+                    }
+                  }}
                   className={`flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-right text-sm transition ${
                     serviceId === s.serviceId
                       ? 'border-coral bg-coral-soft'
@@ -364,7 +371,7 @@ export function BookingWizard({
 
           {selected && (selected.priceRules || []).length > 0 && (
             <div className="space-y-2 border-t border-border pt-3">
-              <p className="text-sm font-medium">انتخاب تنوع</p>
+              <p className="text-sm font-medium">انتخاب زیرمجموعه</p>
               <ul className="space-y-1.5">
                 {(selected.priceRules || []).map((r) => {
                   const on = priceRuleId === r.id;
@@ -531,7 +538,7 @@ export function BookingWizard({
             <div className="flex justify-between gap-2"><dt className="text-gray">زیباگر</dt><dd className="font-medium">{professional.name}</dd></div>
             <div className="flex justify-between gap-2"><dt className="text-gray">خدمت</dt><dd className="font-medium">{selected.name}</dd></div>
             {selectedRuleLabel && (
-              <div className="flex justify-between gap-2"><dt className="text-gray">تنوع</dt><dd className="font-medium">{selectedRuleLabel}</dd></div>
+              <div className="flex justify-between gap-2"><dt className="text-gray">زیرمجموعه</dt><dd className="font-medium">{selectedRuleLabel}</dd></div>
             )}
             {selectedAddOnNames.length > 0 && (
               <div className="flex justify-between gap-2"><dt className="text-gray">گزینه اضافی</dt><dd className="font-medium">{selectedAddOnNames.join('، ')}</dd></div>
@@ -563,7 +570,6 @@ export function BookingWizard({
           <h2 className="text-xl font-bold text-coral">رزرو ثبت شد</h2>
           <p className="text-sm text-gray">وضعیت سرور: <strong>{persianBookingStatus(booking.status)}</strong></p>
           <p className="text-sm font-bold text-coral">{formatPrice(booking.totalPrice)}</p>
-          
           {paymentInfo && <p className="rounded-xl bg-gray-light px-3 py-3 text-sm text-gray">{paymentInfo}</p>}
           <p className="text-xs text-gray">موفقیت پرداخت فقط پس از تأیید سرور/درگاه — هرگز توسط کلاینت ادعا نمی‌شود.</p>
           <div className="flex flex-col gap-2 sm:flex-row sm:justify-center">
