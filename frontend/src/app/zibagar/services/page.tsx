@@ -58,7 +58,6 @@ export default function ZibagarServicesPage() {
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  /** home | specialty (one root) | edit service | add specialty */
   const [mode, setMode] = useState<'home' | 'specialty' | 'edit' | 'add'>('home');
   const [activeRootId, setActiveRootId] = useState<string | null>(null);
   const [path, setPath] = useState<PathNode[]>([]);
@@ -82,7 +81,6 @@ export default function ZibagarServicesPage() {
 
   const [uploadState, setUploadState] = useState<'idle' | 'uploading' | 'ok' | 'err'>('idle');
   const [uploadErr, setUploadErr] = useState<string | null>(null);
-  const [showMoreSearch, setShowMoreSearch] = useState(false);
   const [addSearch, setAddSearch] = useState('');
 
   const roots = useMemo(() => (tree || []).filter((c) => !c.parentId), [tree]);
@@ -109,9 +107,7 @@ export default function ZibagarServicesPage() {
     }
   }, []);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  useEffect(() => { void load(); }, [load]);
 
   const selectedPs = useMemo(
     () => (selectedPsId ? mine.find((m) => m.id === selectedPsId) || null : null),
@@ -134,9 +130,7 @@ export default function ZibagarServicesPage() {
         if (pr.length) setPriceRules(pr);
         if (dr.length) setDurationRules(dr);
         if (pr.length || dr.length) setShowModels(true);
-      } catch {
-        /* ignore */
-      }
+      } catch { /* ignore */ }
     })();
   }, [selectedPsId]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -161,7 +155,6 @@ export default function ZibagarServicesPage() {
     return currentCategory?.services || [];
   }, [path, currentCategory, activeRootId, tree]);
 
-  /** Offered services under active root — restaurant-style menu. */
   const specialtyMenu = useMemo(() => {
     if (!activeRootId) return [];
     const root = findCategory(tree, activeRootId);
@@ -176,7 +169,6 @@ export default function ZibagarServicesPage() {
       .sort((a, b) => serviceLabel(a).localeCompare(serviceLabel(b), 'fa'));
   }, [activeRootId, tree, mine]);
 
-  /** Group menu items by parent category name for restaurant sections. */
   const menuSections = useMemo(() => {
     const map = new Map<string, ProfessionalServiceItem[]>();
     for (const ps of specialtyMenu) {
@@ -187,7 +179,6 @@ export default function ZibagarServicesPage() {
     return Array.from(map.entries());
   }, [specialtyMenu, activeRoot?.name]);
 
-  /** All media under this specialty (all services). */
   const specialtyMedia = useMemo(() => {
     const items: MediaAssetItem[] = [];
     for (const ps of specialtyMenu) {
@@ -243,13 +234,22 @@ export default function ZibagarServicesPage() {
     setSearch('');
   }
 
-  async function ensureAndEditService(serviceId: string, nameHint?: string) {
+  async function ensureAndEditService(
+    serviceId: string,
+    nameHint?: string,
+    initial?: { price?: number; durationMin?: number },
+  ) {
     setBusy(true);
     setError(null);
     try {
       let ps = mine.find((m) => m.serviceId === serviceId);
       if (!ps) {
-        await upsertMyService({ serviceId, durationMin: 60, price: 0, isActive: true });
+        await upsertMyService({
+          serviceId,
+          durationMin: initial?.durationMin && initial.durationMin > 0 ? initial.durationMin : 60,
+          price: initial?.price && initial.price > 0 ? initial.price : 0,
+          isActive: true,
+        });
         await load();
         const refreshed = await fetchMyServices();
         setMine(refreshed || []);
@@ -269,12 +269,14 @@ export default function ZibagarServicesPage() {
     }
   }
 
-  async function createAndEditCustomService(name: string) {
+  async function createAndEditCustomService(
+    name: string,
+    initial?: { price?: number; durationMin?: number },
+  ) {
     if (!activeRootId || !name.trim()) return;
     setBusy(true);
     setError(null);
     try {
-      // Final option attaches under current path category (or root). Price optional (defaults 0).
       const parentCatId = path.length > 0 ? path[path.length - 1].id : activeRootId;
       const created = await createServiceNode({
         name: name.trim(),
@@ -283,7 +285,7 @@ export default function ZibagarServicesPage() {
       setSearch('');
       setMsg(`«${created.name}» اضافه شد`);
       await load();
-      await ensureAndEditService(created.id, created.name);
+      await ensureAndEditService(created.id, created.name, initial);
     } catch (e) {
       setError(friendlyApiError(e));
     } finally {
@@ -291,7 +293,6 @@ export default function ZibagarServicesPage() {
     }
   }
 
-  /** Intermediate feature (category). Never asks for price. */
   async function createFeature(name: string) {
     if (!activeRootId || !name.trim()) return;
     setBusy(true);
@@ -317,11 +318,7 @@ export default function ZibagarServicesPage() {
     setBusy(true);
     setError(null);
     try {
-      await patchMyService(selectedPs.id, {
-        price,
-        durationMin,
-        isActive: true,
-      });
+      await patchMyService(selectedPs.id, { price, durationMin, isActive: true });
       setMsg('ذخیره شد');
       await load();
     } catch (e) {
@@ -335,20 +332,12 @@ export default function ZibagarServicesPage() {
     if (!activeRootId) return;
     const root = findCategory(tree, activeRootId);
     const leaves = collectLeaves(root);
-    if (!leaves.length) {
-      setError('خدمتی برای اعمال وجود ندارد');
-      return;
-    }
+    if (!leaves.length) { setError('خدمتی برای اعمال وجود ندارد'); return; }
     setBusy(true);
     setError(null);
     try {
       for (const leaf of leaves) {
-        await upsertMyService({
-          serviceId: leaf.id,
-          durationMin: durationMin || 60,
-          price: price || 0,
-          isActive: true,
-        });
+        await upsertMyService({ serviceId: leaf.id, durationMin: durationMin || 60, price: price || 0, isActive: true });
       }
       setMsg(`قیمت برای ${leaves.length} مورد اعمال شد`);
       await load();
@@ -364,13 +353,8 @@ export default function ZibagarServicesPage() {
     setBusy(true);
     try {
       await upsertMyPriceRule(selectedPs.id, { label: ruleLabel.trim(), price: rulePrice || price || 0 });
-      await upsertMyDurationRule(selectedPs.id, {
-        label: ruleLabel.trim(),
-        durationMin: ruleDuration || durationMin || 60,
-      });
-      setRuleLabel('');
-      setRulePrice(0);
-      setRuleDuration(60);
+      await upsertMyDurationRule(selectedPs.id, { label: ruleLabel.trim(), durationMin: ruleDuration || durationMin || 60 });
+      setRuleLabel(''); setRulePrice(0); setRuleDuration(60);
       setPriceRules(await fetchMyPriceRules(selectedPs.id));
       setDurationRules(await fetchMyDurationRules(selectedPs.id));
       setMsg('تنوع اضافه شد');
@@ -392,11 +376,7 @@ export default function ZibagarServicesPage() {
         extraDurationMin: addOnExtra || 0,
         isActive: true,
       });
-      setAddOnName('');
-      setAddOnPrice(0);
-      setAddOnExtra(0);
-      setEditingAddOnId(null);
-      setShowAddOnForm(false);
+      setAddOnName(''); setAddOnPrice(0); setAddOnExtra(0); setEditingAddOnId(null); setShowAddOnForm(false);
       setMsg(editingAddOnId ? 'ویژگی به‌روزرسانی شد' : 'ویژگی اضافه شد');
       await load();
     } catch (e) {
@@ -448,7 +428,6 @@ export default function ZibagarServicesPage() {
 
   return (
     <div className="mx-auto max-w-lg space-y-4 px-3 py-4 pb-24">
-      {/* header */}
       <div className="flex items-center justify-between gap-2">
         <div>
           <h1 className={`text-lg font-bold ${navy.title}`}>
@@ -461,9 +440,7 @@ export default function ZibagarServicesPage() {
           {error && <p className="text-xs text-red-600">{error}</p>}
         </div>
         {mode !== 'home' && (
-          <button type="button" onClick={goHome} className="text-sm text-gray-500 underline">
-            ← بازگشت
-          </button>
+          <button type="button" onClick={goHome} className="text-sm text-gray-500 underline">← بازگشت</button>
         )}
       </div>
 
@@ -472,107 +449,36 @@ export default function ZibagarServicesPage() {
           <p className="text-sm text-gray-500">تخصص‌های خود را انتخاب یا بسازید.</p>
           <div className="grid grid-cols-2 gap-2">
             {myRoots.map((r) => (
-              <button
-                key={r.id}
-                type="button"
-                onClick={() => {
-                  setActiveRootId(r.id);
-                  setPath([]);
-                  setMode('specialty');
-                }}
-                className={`rounded-2xl border ${navy.border} bg-white px-3 py-4 text-right text-sm font-medium`}
-              >
-                {r.name}
-              </button>
+              <button key={r.id} type="button" onClick={() => { setActiveRootId(r.id); setPath([]); setMode('specialty'); }} className={`rounded-2xl border ${navy.border} bg-white px-3 py-4 text-right text-sm font-medium`}>{r.name}</button>
             ))}
-            <button
-              type="button"
-              onClick={() => setMode('add')}
-              className={`rounded-2xl border border-dashed ${navy.border} px-3 py-4 text-sm text-gray-500`}
-            >
-              + افزودن تخصص
-            </button>
+            <button type="button" onClick={() => setMode('add')} className={`rounded-2xl border border-dashed ${navy.border} px-3 py-4 text-sm text-gray-500`}>+ افزودن تخصص</button>
           </div>
-
           {FEATURED_ROOT_NAMES.length > 0 && (
             <div>
               <p className="mb-2 text-xs font-semibold text-gray-400">پیشنهادی</p>
               <div className="flex flex-wrap gap-2">
-                {roots
-                  .filter((r) => FEATURED_ROOT_NAMES.some((n) => r.name.includes(n)))
-                  .filter((r) => !selectedRootIds.includes(r.id))
-                  .slice(0, 8)
-                  .map((r) => (
-                    <button
-                      key={r.id}
-                      type="button"
-                      disabled={busy}
-                      onClick={() => void addRootSpecialty(r.id)}
-                      className="rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs"
-                    >
-                      {r.name}
-                    </button>
-                  ))}
+                {roots.filter((r) => FEATURED_ROOT_NAMES.some((n) => r.name.includes(n))).filter((r) => !selectedRootIds.includes(r.id)).slice(0, 8).map((r) => (
+                  <button key={r.id} type="button" disabled={busy} onClick={() => void addRootSpecialty(r.id)} className="rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs">{r.name}</button>
+                ))}
               </div>
             </div>
           )}
-
-          <button
-            type="button"
-            onClick={() => setMode('add')}
-            className={`w-full rounded-xl py-2.5 text-sm font-medium ${navy.btn}`}
-          >
-            + افزودن تخصص
-          </button>
+          <button type="button" onClick={() => setMode('add')} className={`w-full rounded-xl py-2.5 text-sm font-medium ${navy.btn}`}>+ افزودن تخصص</button>
         </div>
       )}
 
       {mode === 'add' && (
         <div className="space-y-3">
-          <Input
-            value={addSearch}
-            onChange={(e) => setAddSearch(e.target.value)}
-            placeholder="نام تخصص..."
-            className="w-full"
-          />
+          <Input value={addSearch} onChange={(e) => setAddSearch(e.target.value)} placeholder="نام تخصص..." className="w-full" />
           {addSearch.trim() && (
             <div className="relative">
               <ul className={`max-h-60 overflow-y-auto rounded-2xl border ${navy.border} bg-white p-1`}>
-                {roots
-                  .filter((r) => r.name.includes(addSearch.trim()))
-                  .slice(0, 10)
-                  .map((r) => (
-                    <li key={r.id}>
-                      <button
-                        type="button"
-                        className="w-full rounded-xl px-3 py-2.5 text-right text-sm hover:bg-[#F3F6F9]"
-                        onClick={() => void addRootSpecialty(r.id)}
-                      >
-                        {r.name}
-                      </button>
-                    </li>
-                  ))}
+                {roots.filter((r) => r.name.includes(addSearch.trim())).slice(0, 10).map((r) => (
+                  <li key={r.id}><button type="button" className="w-full rounded-xl px-3 py-2.5 text-right text-sm hover:bg-[#F3F6F9]" onClick={() => void addRootSpecialty(r.id)}>{r.name}</button></li>
+                ))}
                 {!roots.some((r) => r.name === addSearch.trim()) && (
                   <li>
-                    <button
-                      type="button"
-                      disabled={busy}
-                      className={`w-full rounded-xl px-3 py-2.5 text-right text-sm font-semibold ${navy.title} hover:bg-[#F3F6F9]`}
-                      onClick={async () => {
-                        setBusy(true);
-                        try {
-                          const created = await createCategoryNode({ name: addSearch.trim() });
-                          await addRootSpecialty(created.id);
-                          setAddSearch('');
-                        } catch (e) {
-                          setError(friendlyApiError(e));
-                        } finally {
-                          setBusy(false);
-                        }
-                      }}
-                    >
-                      ＋ افزودن «{addSearch.trim()}»
-                    </button>
+                    <button type="button" disabled={busy} className={`w-full rounded-xl px-3 py-2.5 text-right text-sm font-semibold ${navy.title} hover:bg-[#F3F6F9]`} onClick={async () => { setBusy(true); try { const created = await createCategoryNode({ name: addSearch.trim() }); await addRootSpecialty(created.id); setAddSearch(''); } catch (e) { setError(friendlyApiError(e)); } finally { setBusy(false); } }}>＋ افزودن «{addSearch.trim()}»</button>
                   </li>
                 )}
               </ul>
@@ -660,9 +566,7 @@ export default function ZibagarServicesPage() {
       )}
 
       <p className="text-center text-xs text-gray-400">
-        <Link href="/zibagar/profile/complete" className="underline">
-          تکمیل پروفایل
-        </Link>
+        <Link href="/zibagar/profile/complete" className="underline">تکمیل پروفایل</Link>
       </p>
     </div>
   );
