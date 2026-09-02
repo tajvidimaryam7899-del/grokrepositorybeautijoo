@@ -282,7 +282,9 @@ export function SpecialtyView(props: SpecialtyViewProps) {
                           <td className="px-3 py-2.5 tabular-nums whitespace-nowrap text-gray-700">{(ps.price ?? 0) > 0 ? formatPrice(ps.price) : '—'}</td>
                           <td className="px-3 py-2.5 tabular-nums whitespace-nowrap text-gray-600">{(ps.durationMin ?? 0) > 0 ? `${ps.durationMin} د` : '—'}</td>
                           <td className="px-3 py-2.5">
-                            <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-medium ${st === 'ready' ? 'bg-[#E7F1FF] text-[#2D6CDF]' : 'bg-[#FFE6E2] text-[#FF6F61']}`}>{st === 'ready' ? 'آماده' : 'ناقص'}</span>
+                            <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-medium ${st === 'ready' ? 'bg-[#E7F1FF] text-[#2D6CDF]' : 'bg-[#FFE6E2] text-[#FF6F61]'}`}>
+                              {st === 'ready' ? 'آماده' : 'ناقص'}
+                            </span>
                           </td>
                           <td className="px-3 py-2.5">
                             <div className="flex items-center gap-2">
