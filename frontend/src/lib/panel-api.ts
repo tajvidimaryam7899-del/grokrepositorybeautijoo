@@ -157,6 +157,10 @@ export async function patchMyService(id: string, payload: {
 }) {
   return apiClient.patch(`/professionals/me/services/${id}`, payload);
 }
+/** Rename specialty when this pro is the sole offerer of that catalog service. */
+export async function renameMyService(id: string, name: string) {
+  return apiClient.patch(`/professionals/me/services/${id}/name`, { name });
+}
 export async function createCategoryNode(payload: {
   name: string; parentId?: string; slug?: string; description?: string; sortOrder?: number;
 }) {

@@ -12,6 +12,7 @@ import {
   setMySelectedCategories,
   upsertMyService,
   patchMyService,
+  renameMyService,
   deactivateMyService,
   upsertMyAddOn,
   deactivateMyAddOn,
@@ -88,6 +89,13 @@ export default function ZibagarServicesPage() {
   const [newSpecPrice, setNewSpecPrice] = useState(0);
   const [newSpecDuration, setNewSpecDuration] = useState(60);
   const [newSpecDesc, setNewSpecDesc] = useState('');
+
+  const [editingNamePsId, setEditingNamePsId] = useState<string | null>(null);
+  const [editNameValue, setEditNameValue] = useState('');
+  const [editingSubKey, setEditingSubKey] = useState<string | null>(null);
+  const [editSubLabel, setEditSubLabel] = useState('');
+  const [editSubPrice, setEditSubPrice] = useState(0);
+  const [editSubDuration, setEditSubDuration] = useState(60);
 
   const roots = useMemo(() => (tree || []).filter((c) => !c.parentId), [tree]);
   const myRoots = useMemo(() => roots.filter((r) => selectedRootIds.includes(r.id)), [roots, selectedRootIds]);
@@ -497,7 +505,7 @@ export default function ZibagarServicesPage() {
       {mode === 'home' && (
         <div className="space-y-4">
           <div className="flex items-start justify-between gap-3">
-            <p className="text-sm text-gray-500">تخصص‌ها را مدیریت کنید؛ برای هرکدام در صورت نیاز زیرمجموعه با قیمت و مدت جداگانه بسازید.</p>
+            <p className="text-sm text-gray-500">تخصص‌ها را مدیریت کنید؛ زیرمجموعه‌ها زیر هر تخصص دیده می‌شوند.</p>
             <button type="button" onClick={() => setShowCreateSpecialty((v) => !v)} className={`shrink-0 rounded-xl px-4 py-2 text-sm font-medium ${navy.btn}`}>+ افزودن تخصص</button>
           </div>
 
@@ -532,13 +540,12 @@ export default function ZibagarServicesPage() {
           ) : mine.length > 0 ? (
             <div className={`overflow-hidden rounded-2xl border ${navy.border} bg-white`}>
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[340px] text-right text-sm">
+                <table className="w-full min-w-[320px] text-right text-sm">
                   <thead>
-                    <tr className="bg-[#F3F4F6] text-[11px] font-semibold tracking-wide text-gray-500">
-                      <th className="px-3 py-2.5">تخصص</th>
+                    <tr className="bg-[#F3F4F6] text-[11px] font-semibold text-gray-500">
+                      <th className="px-3 py-2.5">تخصص / زیرمجموعه</th>
                       <th className="px-3 py-2.5 whitespace-nowrap">قیمت</th>
                       <th className="px-3 py-2.5 whitespace-nowrap">مدت</th>
-                      <th className="px-3 py-2.5">زیرمجموعه</th>
                       <th className="px-3 py-2.5">وضعیت</th>
                       <th className="px-3 py-2.5">عملیات</th>
                     </tr>
@@ -546,24 +553,64 @@ export default function ZibagarServicesPage() {
                   <tbody>
                     {mine.map((ps, idx) => {
                       const st = statusOf(ps);
-                      const subCount = (ps.priceRules || []).filter((r) => r.isActive !== false).length;
+                      const subs = (ps.priceRules || []).filter((r) => r.isActive !== false);
                       const rowBg = idx % 2 === 0 ? 'bg-white' : 'bg-[#F9FAFB]';
+                      const isEditingName = editingNamePsId === ps.id;
                       return (
                         <tr key={ps.id} className={`border-t border-gray-100 ${rowBg}`}>
-                          <td className="px-3 py-2.5 font-medium text-[#0B2C4A]">
-                            <button type="button" className="text-right hover:underline" onClick={() => { setSelectedPsId(ps.id); setMode('edit'); }}>{serviceLabel(ps)}</button>
+                          <td className="px-3 py-2.5 align-top">
+                            {isEditingName ? (
+                              <div className="flex flex-wrap items-center gap-1">
+                                <Input autoFocus value={editNameValue} onChange={(e) => setEditNameValue(e.target.value)} className="h-8 max-w-[160px] text-right text-sm" />
+                                <button type="button" disabled={busy || !editNameValue.trim()} className="text-xs font-medium text-[#2D6CDF] disabled:opacity-50" onClick={async () => { setBusy(true); try { await renameMyService(ps.id, editNameValue.trim()); setEditingNamePsId(null); setMsg('نام تخصص ذخیره شد'); await load(); } catch (e) { setError(friendlyApiError(e)); } finally { setBusy(false); } }}>ذخیره</button>
+                                <button type="button" className="text-xs text-gray-500" onClick={() => setEditingNamePsId(null)}>انصراف</button>
+                              </div>
+                            ) : (
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <span className="font-medium text-[#0B2C4A]">{serviceLabel(ps)}</span>
+                                <button type="button" className="text-[10px] text-gray-400 hover:text-[#2D6CDF]" onClick={() => { setEditingNamePsId(ps.id); setEditNameValue(serviceLabel(ps)); setEditingSubKey(null); }}>ویرایش نام</button>
+                              </div>
+                            )}
+                            {subs.length > 0 && (
+                              <ul className="mt-1.5 space-y-1 border-r border-[#E7F1FF] pr-2">
+                                {subs.map((pr) => {
+                                  const dr = (ps.durationRules || []).find((d) => d.label === pr.label && d.isActive !== false);
+                                  const subKey = `${ps.id}:${pr.id}`;
+                                  const isEditingSub = editingSubKey === subKey;
+                                  return (
+                                    <li key={pr.id} className="text-[11px] text-gray-600">
+                                      {isEditingSub ? (
+                                        <div className="flex flex-wrap items-center gap-1 rounded-lg bg-[#F3F6F9] p-1.5">
+                                          <Input value={editSubLabel} onChange={(e) => setEditSubLabel(e.target.value)} className="h-7 w-24 text-right text-[11px]" placeholder="نام" />
+                                          <Input inputMode="numeric" value={editSubPrice ? formatPriceDigits(editSubPrice) : ''} onChange={(e) => setEditSubPrice(parsePriceInput(e.target.value))} className="h-7 w-20 text-right text-[11px]" placeholder="قیمت" />
+                                          <Input type="number" min={5} value={editSubDuration || ''} onChange={(e) => setEditSubDuration(Number(e.target.value) || 60)} className="h-7 w-14 text-right text-[11px]" placeholder="مدت" />
+                                          <button type="button" disabled={busy || !editSubLabel.trim()} className="text-[10px] font-medium text-[#2D6CDF] disabled:opacity-50" onClick={async () => { setBusy(true); try { await upsertMyPriceRule(ps.id, { id: pr.id, label: editSubLabel.trim(), price: editSubPrice || 0 }); if (dr) { await upsertMyDurationRule(ps.id, { id: dr.id, label: editSubLabel.trim(), durationMin: editSubDuration || 60 }); } else { await upsertMyDurationRule(ps.id, { label: editSubLabel.trim(), durationMin: editSubDuration || 60 }); } setEditingSubKey(null); setMsg('زیرمجموعه ذخیره شد'); await load(); } catch (e) { setError(friendlyApiError(e)); } finally { setBusy(false); } }}>ذخیره</button>
+                                          <button type="button" className="text-[10px] text-gray-500" onClick={() => setEditingSubKey(null)}>انصراف</button>
+                                        </div>
+                                      ) : (
+                                        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                                          <span className="text-gray-700">{pr.label}</span>
+                                          <span className="tabular-nums text-gray-500">{(pr.price ?? 0) > 0 ? formatPrice(pr.price) : '—'}</span>
+                                          <span className="tabular-nums text-gray-400">{dr && (dr.durationMin ?? 0) > 0 ? `${dr.durationMin} د` : '—'}</span>
+                                          <button type="button" className="text-[10px] text-[#2D6CDF] hover:underline" onClick={() => { setEditingSubKey(subKey); setEditSubLabel(pr.label); setEditSubPrice(pr.price || 0); setEditSubDuration(dr?.durationMin || 60); setEditingNamePsId(null); }}>ویرایش</button>
+                                        </div>
+                                      )}
+                                    </li>
+                                  );
+                                })}
+                              </ul>
+                            )}
                           </td>
-                          <td className="px-3 py-2.5 tabular-nums whitespace-nowrap text-gray-700">{(ps.price ?? 0) > 0 ? formatPrice(ps.price) : '—'}</td>
-                          <td className="px-3 py-2.5 tabular-nums whitespace-nowrap text-gray-600">{(ps.durationMin ?? 0) > 0 ? `${ps.durationMin} د` : '—'}</td>
-                          <td className="px-3 py-2.5 tabular-nums text-gray-600">{subCount > 0 ? subCount : '—'}</td>
-                          <td className="px-3 py-2.5">
+                          <td className="px-3 py-2.5 align-top tabular-nums whitespace-nowrap text-gray-700">{(ps.price ?? 0) > 0 ? formatPrice(ps.price) : '—'}</td>
+                          <td className="px-3 py-2.5 align-top tabular-nums whitespace-nowrap text-gray-600">{(ps.durationMin ?? 0) > 0 ? `${ps.durationMin} د` : '—'}</td>
+                          <td className="px-3 py-2.5 align-top">
                             <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-medium ${st === 'ready' ? 'bg-[#E7F1FF] text-[#2D6CDF]' : 'bg-[#FFE6E2] text-[#FF6F61]'}`}>
                               {ps.isActive === false ? 'غیرفعال' : st === 'ready' ? 'آماده' : 'ناقص'}
                             </span>
                           </td>
-                          <td className="px-3 py-2.5">
+                          <td className="px-3 py-2.5 align-top">
                             <div className="flex items-center gap-2">
-                              <button type="button" className="text-xs font-medium text-[#2D6CDF] hover:underline" onClick={() => { setSelectedPsId(ps.id); setMode('edit'); }}>ویرایش</button>
+                              <button type="button" className="text-xs font-medium text-[#2D6CDF] hover:underline" onClick={() => { setSelectedPsId(ps.id); setMode('edit'); }}>جزئیات</button>
                               <button type="button" className="text-xs text-red-600 hover:underline" onClick={async () => { if (!window.confirm(`حذف «${serviceLabel(ps)}»؟`)) return; setBusy(true); try { await deactivateMyService(ps.id); setMsg('حذف شد'); await load(); } catch (e) { setError(friendlyApiError(e)); } finally { setBusy(false); } }}>حذف</button>
                             </div>
                           </td>
