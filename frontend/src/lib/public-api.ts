@@ -28,26 +28,17 @@ async function publicGet<T>(path: string, init?: RequestInit): Promise<T> {
   const url = `${API_URL}${path.startsWith('/') ? path : `/${path}`}`;
   const res = await fetch(url, {
     ...init,
-    headers: {
-      Accept: 'application/json',
-      ...(init?.headers || {}),
-    },
+    headers: { Accept: 'application/json', ...(init?.headers || {}) },
     next: init?.next ?? { revalidate: 60 },
   });
   const text = await res.text();
   let data: unknown = null;
   if (text) {
-    try {
-      data = JSON.parse(text);
-    } catch {
-      data = text;
-    }
+    try { data = JSON.parse(text); } catch { data = text; }
   }
   if (!res.ok) {
-    const msg =
-      typeof data === 'object' && data && 'message' in data
-        ? String((data as { message: unknown }).message)
-        : res.statusText;
+    const msg = typeof data === 'object' && data && 'message' in data
+      ? String((data as { message: unknown }).message) : res.statusText;
     throw new PublicApiError(res.status, msg);
   }
   return data as T;
@@ -69,9 +60,10 @@ export function searchProfessionals(params: SearchParams = {}) {
   if (params.page) sp.set('page', String(params.page));
   if (params.limit) sp.set('limit', String(params.limit));
   const qs = sp.toString();
-  return publicGet<ProfessionalsSearchResponse>(
-    `/professionals${qs ? `?${qs}` : ''}`,
-  );
+  const path = params.category
+    ? `/service-filters/professionals${qs ? `?${qs}` : ''}`
+    : `/professionals${qs ? `?${qs}` : ''}`;
+  return publicGet<ProfessionalsSearchResponse>(path);
 }
 
 export function getProfessionalBySlug(slug: string) {
@@ -85,10 +77,12 @@ export function listCategories() {
   return publicGet<ServiceCategory[]>('/categories');
 }
 
+export function listFilterCategories() {
+  return publicGet<ServiceCategory[]>('/service-filters/categories');
+}
+
 export function listServices(categorySlug?: string) {
-  const qs = categorySlug
-    ? `?category=${encodeURIComponent(categorySlug)}`
-    : '';
+  const qs = categorySlug ? `?category=${encodeURIComponent(categorySlug)}` : '';
   return publicGet<ServiceItem[]>(`/services${qs}`);
 }
 
