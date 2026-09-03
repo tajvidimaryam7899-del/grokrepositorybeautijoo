@@ -14,7 +14,7 @@ class StatusDto {
 
 @ApiTags('admin')
 @ApiBearerAuth()
-@Roles('admin')
+@Roles('SUPER_ADMIN')
 @Controller('admin')
 export class AdminController {
   constructor(private readonly service: AdminService) {}
