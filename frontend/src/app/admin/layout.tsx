@@ -5,10 +5,16 @@ const ITEMS = [
   { href: '/admin', label: 'داشبورد' },
   { href: '/admin/users', label: 'کاربران' },
   { href: '/admin/professionals', label: 'زیباگرها' },
-  { href: '/admin/service-categories', label: 'دسته‌بندی تخصص‌ها' },
+  { href: '/admin/service-categories', label: 'تخصص‌ها و دسته‌بندی‌ها' },
   { href: '/admin/bookings', label: 'رزروها' },
-  { href: '/admin/audit', label: 'لاگ‌های ممیزی' },
+  { href: '/admin/finance', label: 'مالی', disabled: true },
+  { href: '/admin/reviews', label: 'نظرات و امتیازها', disabled: true },
+  { href: '/admin/media', label: 'رسانه‌ها', disabled: true },
+  { href: '/admin/content', label: 'محتوا', disabled: true },
+  { href: '/admin/site-builder', label: 'طراحی سایت', disabled: true },
+  { href: '/admin/settings', label: 'تنظیمات', disabled: true },
+  { href: '/admin/audit', label: 'لاگ فعالیت‌ها' },
 ];
 export default function AdminLayout({ children }: { children: ReactNode }) {
-  return <PanelShell title="پنل ادمین" items={ITEMS} roles={['admin']}>{children}</PanelShell>;
+  return <PanelShell title="پنل ادمین" items={ITEMS} roles={['SUPER_ADMIN']}>{children}</PanelShell>;
 }

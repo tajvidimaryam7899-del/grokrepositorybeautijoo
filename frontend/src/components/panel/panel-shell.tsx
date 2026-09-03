@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { RequireAuth } from '@/components/auth/require-auth';
 
-export type PanelNavItem = { href: string; label: string };
+export type PanelNavItem = { href: string; label: string; disabled?: boolean };
 
 type Props = { title: string; items: PanelNavItem[]; roles: string[]; children: ReactNode };
 
@@ -20,6 +20,18 @@ export function PanelShell({ title, items, roles, children }: Props) {
             <h2 className="mb-4 text-lg font-bold text-foreground">{title}</h2>
             <nav className="flex gap-1 overflow-x-auto pb-2 md:flex-col md:overflow-visible md:pb-0">
               {items.map((item) => {
+                if (item.disabled) {
+                  return (
+                    <span
+                      key={item.href}
+                      aria-disabled="true"
+                      className="flex cursor-not-allowed items-center justify-between gap-2 whitespace-nowrap rounded-xl px-3 py-2 text-sm font-medium text-gray/60"
+                    >
+                      {item.label}
+                      <span className="rounded-full bg-gray-light px-2 py-0.5 text-[10px] font-normal text-gray">به‌زودی</span>
+                    </span>
+                  );
+                }
                 const active = pathname === item.href || (item.href !== items[0]?.href && pathname.startsWith(item.href + '/'));
                 return (
                   <Link key={item.href} href={item.href}
