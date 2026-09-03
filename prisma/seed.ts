@@ -4,6 +4,8 @@
  *   Admin:        09120000000 / Admin@12345
  *   زیباگر:       09121111111 / Zibagar@123
  *   Customer:     09123333333 / Customer@123
+ *
+ * SUPER_ADMIN is upserted as a system role only — not assigned to any user here.
  */
 import { PrismaClient, DayOfWeek, ProfessionalStatus, UserStatus } from '@prisma/client';
 import * as argon2 from 'argon2';
@@ -18,6 +20,12 @@ async function main() {
     { name: 'professional', displayName: 'زیباگر', isSystem: true },
     { name: 'staff', displayName: 'کارمند', isSystem: true },
     { name: 'admin', displayName: 'مدیر', isSystem: true },
+    {
+      name: 'SUPER_ADMIN',
+      displayName: 'سوپر ادمین',
+      description: 'نقش سیستمی سطح بالای پلتفرم؛ بدون انتساب خودکار به کاربر',
+      isSystem: true,
+    },
   ];
   for (const r of roles) {
     await prisma.role.upsert({ where: { name: r.name }, update: {}, create: r });
@@ -236,6 +244,7 @@ async function main() {
   console.log('  زیباگر:    09121111111 / Zibagar@123');
   console.log('  Customer:  09123333333 / Customer@123');
   console.log('  Professional slug: sara-mohammadi');
+  console.log('  SUPER_ADMIN role: seeded (not assigned to any user)');
 }
 
 main()
