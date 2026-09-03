@@ -8,6 +8,7 @@ import { HealthModule } from './health/health.module';
 import { AuthModule } from './auth/auth.module';
 import { ProfessionalsModule } from './professionals/professionals.module';
 import { ServicesModule } from './services/services.module';
+import { ServiceFiltersModule } from './service-filters/service-filters.module';
 import { LocationsModule } from './locations/locations.module';
 import { AvailabilityModule } from './availability/availability.module';
 import { BookingsModule } from './bookings/bookings.module';
@@ -33,6 +34,7 @@ import { RolesGuard } from './common/guards/roles.guard';
     AuthModule,
     ProfessionalsModule,
     ServicesModule,
+    ServiceFiltersModule,
     LocationsModule,
     AvailabilityModule,
     BookingsModule,
