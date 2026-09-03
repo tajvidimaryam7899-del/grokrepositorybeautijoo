@@ -22,7 +22,7 @@ export class ServicesController {
   @Public() @Get('categories') categories() { return this.service.listCategories(); }
   @Public() @Get('services/hierarchy') hierarchy() { return this.service.listHierarchy(); }
   @Public() @Get('services') services(@Query('category') category?: string) { return this.service.listServices(category); }
-  @ApiBearerAuth() @Roles('admin') @Post('categories') createCategory(@CurrentUser('id') userId: string, @Body() dto: CreateCategoryNodeDto) { return this.service.createCategoryNode(userId, dto); }
+  @ApiBearerAuth() @Roles('SUPER_ADMIN') @Post('categories') createCategory(@CurrentUser('id') userId: string, @Body() dto: CreateCategoryNodeDto) { return this.service.createCategoryNode(userId, dto); }
   @ApiBearerAuth() @Roles('professional', 'admin') @Post('services') createService(@CurrentUser('id') userId: string, @Body() dto: CreateServiceNodeDto) { return this.service.createServiceNode(userId, dto); }
   @ApiBearerAuth() @Roles('professional', 'admin') @Get('professionals/me/services') myServices(@CurrentUser('id') userId: string) { return this.service.listMyServices(userId); }
   @ApiBearerAuth() @Roles('professional', 'admin') @Post('professionals/me/services') upsert(@CurrentUser('id') userId: string, @Body() dto: UpsertProServiceDto) { return this.service.upsertProfessionalService(userId, dto); }
