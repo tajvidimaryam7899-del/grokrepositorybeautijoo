@@ -57,7 +57,7 @@ export function Header() {
 
           {!loading && isAuthenticated ? (
             <div className="hidden items-center gap-2 sm:flex">
-              {hasRole('admin') && (
+              {hasRole('SUPER_ADMIN') && (
                 <Link
                   href="/admin"
                   className="rounded-xl px-2 py-1.5 text-sm font-medium text-blue hover:bg-blue-soft"
@@ -172,7 +172,7 @@ export function Header() {
                     پنل زیباگر
                   </Link>
                 )}
-                {hasRole('admin') && (
+                {hasRole('SUPER_ADMIN') && (
                   <Link
                     href="/admin"
                     onClick={() => setOpen(false)}
