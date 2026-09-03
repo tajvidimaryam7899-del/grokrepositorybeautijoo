@@ -60,31 +60,31 @@ export class ServiceFiltersController {
   @Delete('professionals/me/services/:psId/filter-categories/:categoryId')
   removeMyCategory(@CurrentUser('id') userId: string, @Param('psId') psId: string, @Param('categoryId') categoryId: string) { return this.service.removeMyCategory(userId, psId, categoryId); }
 
-  @ApiBearerAuth() @Roles('admin')
+  @ApiBearerAuth() @Roles('SUPER_ADMIN')
   @Get('admin/service-categories')
   adminCategories() { return this.service.listAdminCategories(); }
 
-  @ApiBearerAuth() @Roles('admin')
+  @ApiBearerAuth() @Roles('SUPER_ADMIN')
   @Post('admin/service-categories')
   createCategory(@Body() dto: CategoryDto) { return this.service.createCategory(dto); }
 
-  @ApiBearerAuth() @Roles('admin')
+  @ApiBearerAuth() @Roles('SUPER_ADMIN')
   @Patch('admin/service-categories/:id')
   updateCategory(@Param('id') id: string, @Body() dto: CategoryDto) { return this.service.updateCategory(id, dto); }
 
-  @ApiBearerAuth() @Roles('admin')
+  @ApiBearerAuth() @Roles('SUPER_ADMIN')
   @Post('admin/services/:serviceId/filter-categories')
   assignCategory(@Param('serviceId') serviceId: string, @Body() dto: AssignCategoryDto) { return this.service.assignCategoryToService(serviceId, dto.categoryId, dto.sortOrder); }
 
-  @ApiBearerAuth() @Roles('admin')
+  @ApiBearerAuth() @Roles('SUPER_ADMIN')
   @Delete('admin/services/:serviceId/filter-categories/:categoryId')
   unassignCategory(@Param('serviceId') serviceId: string, @Param('categoryId') categoryId: string) { return this.service.unassignCategoryFromService(serviceId, categoryId); }
 
-  @ApiBearerAuth() @Roles('admin')
+  @ApiBearerAuth() @Roles('SUPER_ADMIN')
   @Get('admin/service-category-requests')
   requests(@Query('status') status?: 'pending' | 'approved' | 'rejected') { return this.service.listRequests(status); }
 
-  @ApiBearerAuth() @Roles('admin')
+  @ApiBearerAuth() @Roles('SUPER_ADMIN')
   @Patch('admin/service-category-requests/:psId/:categoryId')
   review(@CurrentUser('id') userId: string, @Param('psId') psId: string, @Param('categoryId') categoryId: string, @Body() dto: ReviewDto) { return this.service.reviewRequest(userId, psId, categoryId, dto.status); }
 }
