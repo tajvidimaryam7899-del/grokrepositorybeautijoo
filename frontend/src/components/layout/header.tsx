@@ -92,6 +92,9 @@ export function Header() {
               {hasRole('customer') && !hasRole('professional') && (
                 <span className="hidden text-sm text-gray sm:inline">{displayName}</span>
               )}
+              {hasRole('SUPER_ADMIN') && !hasRole('customer') && !hasRole('professional') && (
+                <span className="hidden text-sm text-gray sm:inline">{displayName}</span>
+              )}
               <Button variant="ghost" size="sm" onClick={() => logout()}>
                 خروج
               </Button>
