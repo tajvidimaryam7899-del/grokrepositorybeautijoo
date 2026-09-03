@@ -5,6 +5,7 @@ const ITEMS = [
   { href: '/admin', label: 'داشبورد' },
   { href: '/admin/users', label: 'کاربران' },
   { href: '/admin/professionals', label: 'زیباگرها' },
+  { href: '/admin/service-categories', label: 'دسته‌بندی تخصص‌ها' },
   { href: '/admin/bookings', label: 'رزروها' },
   { href: '/admin/audit', label: 'لاگ‌های ممیزی' },
 ];
