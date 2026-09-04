@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, ForbiddenException, Inject, ConflictExce
 import { PrismaService } from '../prisma/prisma.service';
 import { PAYMENT_PROVIDER, PaymentProvider } from './payment.provider';
 import { randomUUID } from 'crypto';
+import { Prisma } from '@prisma/client';
 import {
   calculateCommissionSplit,
   DEFAULT_COMMISSION_RATE_PERCENT,
@@ -81,9 +82,21 @@ export class PaymentsService {
 
     const verified = await this.provider.verify(providerRef);
     if (!verified.success) {
-      await this.prisma.payment.update({
-        where: { id: payment.id },
-        data: { status: 'failed', failedAt: new Date() },
+      await this.prisma.$transaction(async (tx) => {
+        await tx.payment.update({
+          where: { id: payment.id },
+          data: { status: 'failed', failedAt: new Date() },
+        });
+        await tx.auditLog.create({
+          data: {
+            actorId: null,
+            action: 'payment.failed',
+            entityType: 'payment',
+            entityId: payment.id,
+            before: { status: payment.status } as Prisma.InputJsonValue,
+            after: { status: 'failed', bookingId: payment.bookingId } as Prisma.InputJsonValue,
+          },
+        });
       });
       return { status: 'failed', bookingId: payment.bookingId };
     }
@@ -98,15 +111,33 @@ export class PaymentsService {
       ratePercent,
     );
 
-    await this.prisma.payment.update({
-      where: { id: payment.id },
-      data: {
-        status: 'paid',
-        paidAt: new Date(),
-        platformCommissionRate: ratePercent,
-        platformCommissionAmount: commissionAmount,
-        professionalNetAmount,
-      },
+    await this.prisma.$transaction(async (tx) => {
+      await tx.payment.update({
+        where: { id: payment.id },
+        data: {
+          status: 'paid',
+          paidAt: new Date(),
+          platformCommissionRate: ratePercent,
+          platformCommissionAmount: commissionAmount,
+          professionalNetAmount,
+        },
+      });
+      await tx.auditLog.create({
+        data: {
+          actorId: null,
+          action: 'payment.paid',
+          entityType: 'payment',
+          entityId: payment.id,
+          before: { status: payment.status } as Prisma.InputJsonValue,
+          after: {
+            status: 'paid',
+            amount: payment.amount,
+            platformCommissionRate: ratePercent,
+            platformCommissionAmount: commissionAmount,
+            professionalNetAmount,
+          } as Prisma.InputJsonValue,
+        },
+      });
     });
     return { status: 'paid', bookingId: payment.bookingId };
   }
