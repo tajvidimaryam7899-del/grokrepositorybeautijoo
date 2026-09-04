@@ -25,6 +25,12 @@ export class AdminController {
     return this.service.stats();
   }
 
+  @Get('dashboard')
+  @ApiOperation({ summary: 'داشبورد کامل Super Admin: KPI، روند ۳۰ روزه، موارد نیازمند توجه، فعالیت اخیر و رکوردهای اخیر (همه از داده واقعی)' })
+  dashboard() {
+    return this.service.dashboard();
+  }
+
   @Get('users')
   listUsers(@Query('page') page?: string, @Query('limit') limit?: string) {
     return this.service.listUsers(
