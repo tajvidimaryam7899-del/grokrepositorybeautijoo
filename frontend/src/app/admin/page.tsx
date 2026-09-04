@@ -120,7 +120,7 @@ export default function AdminDashboardPage() {
           label="زیباگر نیازمند بررسی"
           value={fmt(overview.pendingProfessionals)}
           accent={overview.pendingProfessionals > 0 ? 'text-coral' : 'text-foreground'}
-          href="/admin/professionals?status=pending_review"
+          href="/admin/professionals"
         />
         <KpiCard label="کل رزروها" value={fmt(overview.totalBookings)} href="/admin/bookings" />
         <KpiCard label="رزروهای انجام‌شده" value={fmt(overview.completedBookings)} accent="text-blue" />
@@ -215,7 +215,7 @@ export default function AdminDashboardPage() {
           <div className="grid gap-3 sm:grid-cols-3">
             {pending.professionalsAwaitingReview > 0 && (
               <Link
-                href="/admin/professionals?status=pending_review"
+                href="/admin/professionals"
                 className="rounded-xl border border-coral/20 bg-coral-soft px-4 py-3 transition hover:opacity-90"
               >
                 <p className="text-lg font-bold text-coral">{fmt(pending.professionalsAwaitingReview)}</p>
