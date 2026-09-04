@@ -468,6 +468,14 @@ model Payment {
   provider        String        @db.VarChar(50)
   providerRef     String?       @map("provider_ref") @db.VarChar(255)
   idempotencyKey  String        @unique @map("idempotency_key") @db.VarChar(100)
+  /// Commission snapshot — set exactly once, the moment this Payment first
+  /// becomes `paid` (see PaymentsService.callback). Always NULL for any
+  /// Payment that was never (yet) paid, and for Payments that were paid
+  /// before this snapshot existed — NEVER back-filled or recomputed from
+  /// the current rate. A NULL here means "no snapshot", not zero.
+  platformCommissionRate   Decimal? @map("platform_commission_rate") @db.Decimal(5, 2)
+  platformCommissionAmount Int?     @map("platform_commission_amount")
+  professionalNetAmount    Int?     @map("professional_net_amount")
   paidAt          DateTime?     @map("paid_at") @db.Timestamptz
   failedAt        DateTime?     @map("failed_at") @db.Timestamptz
   metadata        Json?
