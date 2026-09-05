@@ -234,6 +234,8 @@ model Professional {
   logoUrl         String?            @map("logo_url") @db.VarChar(512)
   /// Root category IDs the pro selected (wizard / my specialties). JSON string[]
   selectedCategoryIds Json?            @map("selected_category_ids")
+  /// Slot granularity (minutes) used to generate the pro's own schedule grid — 15/30/45/60/90/120
+  slotIntervalMin Int                @default(30) @map("slot_interval_min")
   createdAt       DateTime           @default(now()) @map("created_at") @db.Timestamptz
   updatedAt       DateTime           @updatedAt @map("updated_at") @db.Timestamptz
   user                 User                  @relation(fields: [userId], references: [id], onDelete: Cascade)

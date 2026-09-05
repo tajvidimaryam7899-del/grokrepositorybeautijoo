@@ -3,9 +3,9 @@ import { PrismaService } from '../prisma/prisma.service';
 import { DayOfWeek } from '@prisma/client';
 
 /** Iran Standard Time — fixed UTC+3:30 (no DST as of 2026). */
-const TEHRAN_OFFSET_MS = 3.5 * 60 * 60 * 1000;
+export const TEHRAN_OFFSET_MS = 3.5 * 60 * 60 * 1000;
 
-const DAY_MAP: Record<number, DayOfWeek> = {
+export const DAY_MAP: Record<number, DayOfWeek> = {
   0: DayOfWeek.sunday,
   1: DayOfWeek.monday,
   2: DayOfWeek.tuesday,
@@ -15,19 +15,19 @@ const DAY_MAP: Record<number, DayOfWeek> = {
   6: DayOfWeek.saturday,
 };
 
-function parseTime(t: string): number {
+export function parseTime(t: string): number {
   const [h, m] = t.split(':').map(Number);
   return h * 60 + m;
 }
 
-function formatTime(mins: number): string {
+export function formatTime(mins: number): string {
   const h = Math.floor(mins / 60);
   const m = mins % 60;
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
 /** YYYY-MM-DD as a calendar day in Tehran → UTC bounds for that local day. */
-function tehranDayBounds(dateStr: string): { dayStart: Date; dayEnd: Date; dayOfWeek: DayOfWeek } {
+export function tehranDayBounds(dateStr: string): { dayStart: Date; dayEnd: Date; dayOfWeek: DayOfWeek } {
   const parts = dateStr.split('-').map(Number);
   if (parts.length !== 3 || parts.some((n) => Number.isNaN(n))) {
     throw new BadRequestException('تاریخ نامعتبر');
@@ -46,7 +46,7 @@ function tehranDayBounds(dateStr: string): { dayStart: Date; dayEnd: Date; dayOf
 }
 
 /** Minutes since Tehran midnight for a timestamptz instant on that day. */
-function minutesSinceTehranMidnight(instant: Date, dayStart: Date): number {
+export function minutesSinceTehranMidnight(instant: Date, dayStart: Date): number {
   return (instant.getTime() - dayStart.getTime()) / 60_000;
 }
 
