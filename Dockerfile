@@ -8,7 +8,7 @@ ENV NODE_ENV=production
 COPY package.json ./
 COPY frontend/package.json ./frontend/package.json
 COPY backend/package.json ./backend/package.json
-RUN npm install
+RUN npm install --include=dev
 
 COPY frontend ./frontend
 
