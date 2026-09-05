@@ -126,14 +126,19 @@ export default function AdminDashboardPage() {
         <KpiCard label="رزروهای انجام‌شده" value={fmt(overview.completedBookings)} accent="text-blue" />
         <KpiCard label="رزروهای لغوشده" value={fmt(overview.cancelledBookings)} accent="text-gray" />
         <KpiCard label="کل نظرات" value={fmt(overview.totalReviews)} />
-        <Card className="space-y-1">
-          <p className="text-xs text-gray">درآمد</p>
-          {overview.revenue.available ? (
-            <p className="text-2xl font-bold text-coral">{formatPrice(overview.revenue.total || 0)}</p>
-          ) : (
-            <p className="text-sm text-gray">هنوز درگاه پرداخت واقعی متصل نشده — این عدد در دسترس نیست.</p>
-          )}
-        </Card>
+        <Link href="/admin/finance" className="block transition hover:opacity-90">
+          <Card className="space-y-1">
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-gray">درآمد و مدیریت مالی</p>
+              <span className="text-[10px] text-coral font-medium">مشاهده گزارش مالی ←</span>
+            </div>
+            {overview.revenue.available ? (
+              <p className="text-2xl font-bold text-coral">{formatPrice(overview.revenue.total || 0)}</p>
+            ) : (
+              <p className="text-xs text-gray">مدیریت تراکنش‌ها و کارمزد پلتفرم (درگاه تستی)</p>
+            )}
+          </Card>
+        </Link>
       </div>
 
       {/* Time-based stats */}

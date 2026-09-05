@@ -3,9 +3,14 @@
   "version": "1.0.0",
   "private": true,
   "description": "Beautijoo - Persian RTL marketplace and booking platform for beauty professionals",
+  "workspaces": [
+    "frontend"
+  ],
   "scripts": {
-    "build": "cd frontend && npm install && npm run build && rm -rf ../.next ../public && cp -a .next ../.next && mkdir -p ../.next/standalone/.next && cp -a .next/static ../.next/standalone/.next/static && mkdir -p ../.next/standalone/public && if [ -d public ]; then cp -a public/. ../.next/standalone/public/; fi && mkdir -p ../public && if [ -d public ]; then cp -a public/. ../public/; fi && test -f ../.next/standalone/server.js",
-    "start": "HOSTNAME=0.0.0.0 node .next/standalone/server.js",
+    "dev": "cd frontend && npm run dev",
+    "build": "cd frontend && npm run build",
+    "lint": "cd frontend && npm run lint",
+    "start": "cd frontend && npm run start",
     "backend:dev": "cd backend && npm run start:dev",
     "backend:build": "cd backend && npm run build",
     "backend:test": "cd backend && npm run test",

@@ -23,6 +23,18 @@ export function persianProfessionalStatus(status: string): string {
   return map[status] || status;
 }
 
+export function persianPaymentStatus(status: string): string {
+  const map: Record<string, string> = {
+    pending: 'در انتظار پرداخت',
+    processing: 'در حال پردازش',
+    paid: 'موفق و تسویه‌شده',
+    failed: 'ناموفق',
+    refunded: 'مسترد شده',
+    cancelled: 'لغو شده',
+  };
+  return map[status] || map[status?.toLowerCase()] || status;
+}
+
 export const WEEKDAY_FA: Record<string, string> = {
   SUNDAY: 'یکشنبه',
   MONDAY: 'دوشنبه',

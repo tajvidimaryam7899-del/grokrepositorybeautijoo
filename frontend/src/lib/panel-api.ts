@@ -461,3 +461,169 @@ export type AdminDashboard = {
 export async function fetchAdminDashboard() {
   return apiClient.get<AdminDashboard>('/admin/dashboard');
 }
+
+// -----------------------------------------------------------------------------
+// Admin Financial Types & API
+// -----------------------------------------------------------------------------
+
+export type AdminFinancialPeriod = 'today' | 'this_month' | 'all_time';
+
+export type AdminFinancialSummary = {
+  period: AdminFinancialPeriod;
+  currency: 'TOMAN';
+  providerType: string;
+  refundImplemented: boolean;
+  grossRevenue: number;
+  platformCommission: number;
+  professionalNet: number;
+  paymentFee: number;
+  transactions: {
+    paid: number;
+    pending: number;
+    failed: number;
+    cancelled: number;
+    refunded: number;
+  };
+  recentPaidPayments: Array<{
+    id: string;
+    amount: number;
+    platformCommissionRate: number | null;
+    platformCommissionAmount: number | null;
+    professionalNetAmount: number | null;
+    provider: string;
+    providerRef: string | null;
+    paidAt: string | null;
+    booking?: {
+      id: string;
+      customer?: { phone: string; profile?: { displayName: string | null } };
+      professional?: { title: string; slug: string };
+    };
+  }>;
+};
+
+export type AdminFinancialTransaction = {
+  id: string;
+  bookingId: string;
+  amount: number;
+  status: 'pending' | 'processing' | 'paid' | 'failed' | 'refunded' | 'cancelled';
+  provider: string;
+  providerRef: string | null;
+  idempotencyKey: string;
+  platformCommissionRate: number | null;
+  platformCommissionAmount: number | null;
+  professionalNetAmount: number | null;
+  paidAt: string | null;
+  failedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  booking?: {
+    id: string;
+    totalPrice: number;
+    status: string;
+    scheduledDate: string;
+    customer?: {
+      id: string;
+      phone: string;
+      profile?: { displayName: string | null };
+    };
+    professional?: {
+      id: string;
+      title: string;
+      slug: string;
+    };
+  };
+};
+
+export type AdminFinancialTransactionsResponse = {
+  items: AdminFinancialTransaction[];
+  meta: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+};
+
+export type AdminFinancialTransactionDetail = AdminFinancialTransaction & {
+  isCommissionSnapshotted: boolean;
+  providerNote: string;
+  refundStatus: string;
+  booking: {
+    id: string;
+    totalPrice: number;
+    status: string;
+    scheduledDate: string;
+    customer?: {
+      id: string;
+      phone: string;
+      profile?: { displayName: string | null };
+    };
+    professional?: {
+      id: string;
+      title: string;
+      slug: string;
+      address?: string | null;
+      user?: { phone: string };
+    };
+    items: Array<{
+      id: string;
+      unitPrice: number;
+      durationMin: number;
+      addOnsSnapshot?: any;
+      service?: { name: string };
+    }>;
+  };
+};
+
+export type AdminCommissionSetting = {
+  key: string;
+  rate: number;
+  defaultRate: number;
+  updatedAt: string | null;
+  notice: string;
+};
+
+export async function fetchAdminFinancialSummary(period: AdminFinancialPeriod = 'all_time') {
+  return apiClient.get<AdminFinancialSummary>(`/admin/finance/summary?period=${period}`);
+}
+
+export async function fetchAdminFinancialTransactions(params: {
+  page?: number;
+  limit?: number;
+  status?: string;
+  provider?: string;
+  search?: string;
+  startDate?: string;
+  endDate?: string;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
+}) {
+  const query = new URLSearchParams();
+  if (params.page) query.set('page', String(params.page));
+  if (params.limit) query.set('limit', String(params.limit));
+  if (params.status) query.set('status', params.status);
+  if (params.provider) query.set('provider', params.provider);
+  if (params.search) query.set('search', params.search);
+  if (params.startDate) query.set('startDate', params.startDate);
+  if (params.endDate) query.set('endDate', params.endDate);
+  if (params.sortBy) query.set('sortBy', params.sortBy);
+  if (params.sortOrder) query.set('sortOrder', params.sortOrder);
+
+  return apiClient.get<AdminFinancialTransactionsResponse>(`/admin/finance/transactions?${query.toString()}`);
+}
+
+export async function fetchAdminFinancialTransactionDetail(id: string) {
+  return apiClient.get<AdminFinancialTransactionDetail>(`/admin/finance/transactions/${id}`);
+}
+
+export async function fetchAdminCommissionSetting() {
+  return apiClient.get<AdminCommissionSetting>('/admin/finance/settings/commission');
+}
+
+export async function updateAdminCommissionSetting(rate: number) {
+  return apiClient.post<{ success: boolean; rate: number; updatedAt: string; notice: string }>(
+    '/admin/finance/settings/commission',
+    { rate },
+  );
+}
+

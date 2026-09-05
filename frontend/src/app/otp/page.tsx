@@ -13,7 +13,7 @@ function OtpForm() {
   const { requestOtp, verifyOtp, isAuthenticated } = useAuth();
   const router = useRouter();
   const search = useSearchParams();
-  const next = search.get('next') || '/panel';
+  const next = search?.get('next') || '/panel';
 
   const [step, setStep] = useState<'phone' | 'code'>('phone');
   const [phone, setPhone] = useState('');

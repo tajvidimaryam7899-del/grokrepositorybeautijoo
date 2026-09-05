@@ -13,7 +13,7 @@ import type { BookingRecord } from '@/types/booking';
 
 function ConfirmationBody() {
   const params = useParams();
-  const id = String(params.id || '');
+  const id = String(params?.id || '');
   const { isAuthenticated } = useAuth();
   const [booking, setBooking] = useState<BookingRecord | null>(null);
   const [error, setError] = useState<string | null>(null);

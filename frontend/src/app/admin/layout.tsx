@@ -3,11 +3,11 @@ import type { ReactNode } from 'react';
 import { PanelShell } from '@/components/panel/panel-shell';
 const ITEMS = [
   { href: '/admin', label: 'داشبورد' },
+  { href: '/admin/finance', label: 'مدیریت مالی' },
   { href: '/admin/users', label: 'کاربران' },
   { href: '/admin/professionals', label: 'زیباگرها' },
   { href: '/admin/service-categories', label: 'تخصص‌ها و دسته‌بندی‌ها' },
   { href: '/admin/bookings', label: 'رزروها' },
-  { href: '/admin/finance', label: 'مالی', disabled: true },
   { href: '/admin/reviews', label: 'نظرات و امتیازها', disabled: true },
   { href: '/admin/media', label: 'رسانه‌ها', disabled: true },
   { href: '/admin/content', label: 'محتوا', disabled: true },

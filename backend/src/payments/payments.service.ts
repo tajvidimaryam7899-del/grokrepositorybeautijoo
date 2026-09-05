@@ -2,6 +2,11 @@ import { Injectable, NotFoundException, ForbiddenException, Inject, ConflictExce
 import { PrismaService } from '../prisma/prisma.service';
 import { PAYMENT_PROVIDER, PaymentProvider } from './payment.provider';
 import { randomUUID } from 'crypto';
+import {
+  calculateCommission,
+  DEFAULT_PLATFORM_COMMISSION_RATE,
+  PLATFORM_COMMISSION_RATE_KEY,
+} from './financial.util';
 
 @Injectable()
 export class PaymentsService {
@@ -51,6 +56,7 @@ export class PaymentsService {
   async callback(providerRef: string) {
     const payment = await this.prisma.payment.findFirst({ where: { providerRef } });
     if (!payment) throw new NotFoundException();
+    // Idempotency check: If already paid, return early without recomputing commission or modifying snapshot
     if (payment.status === 'paid') return { status: 'paid', bookingId: payment.bookingId };
 
     const verified = await this.provider.verify(providerRef);
@@ -62,9 +68,40 @@ export class PaymentsService {
       return { status: 'failed', bookingId: payment.bookingId };
     }
 
+    // Retrieve active commission rate from PlatformSetting, or fallback to DEFAULT_PLATFORM_COMMISSION_RATE (10%)
+    let rate = DEFAULT_PLATFORM_COMMISSION_RATE;
+    try {
+      const setting = await this.prisma.platformSetting.findUnique({
+        where: { key: PLATFORM_COMMISSION_RATE_KEY },
+      });
+      if (setting && setting.value !== null && setting.value !== undefined) {
+        const val = typeof setting.value === 'number' 
+          ? setting.value 
+          : (typeof setting.value === 'object' && 'rate' in (setting.value as any))
+            ? Number((setting.value as any).rate)
+            : Number(setting.value);
+        if (!isNaN(val) && val >= 0 && val <= 100) {
+          rate = val;
+        }
+      }
+    } catch {
+      rate = DEFAULT_PLATFORM_COMMISSION_RATE;
+    }
+
+    const { commissionRate, commissionAmount, professionalNetAmount } = calculateCommission(
+      payment.amount,
+      rate,
+    );
+
     await this.prisma.payment.update({
       where: { id: payment.id },
-      data: { status: 'paid', paidAt: new Date() },
+      data: {
+        status: 'paid',
+        paidAt: new Date(),
+        platformCommissionRate: commissionRate,
+        platformCommissionAmount: commissionAmount,
+        professionalNetAmount: professionalNetAmount,
+      },
     });
     return { status: 'paid', bookingId: payment.bookingId };
   }

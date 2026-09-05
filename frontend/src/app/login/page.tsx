@@ -13,7 +13,7 @@ function LoginForm() {
   const { loginWithPassword, isAuthenticated, user, hasRole } = useAuth();
   const router = useRouter();
   const search = useSearchParams();
-  const nextParam = search.get('next');
+  const nextParam = search?.get('next');
 
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');

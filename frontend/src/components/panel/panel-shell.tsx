@@ -32,7 +32,7 @@ export function PanelShell({ title, items, roles, children }: Props) {
                     </span>
                   );
                 }
-                const active = pathname === item.href || (item.href !== items[0]?.href && pathname.startsWith(item.href + '/'));
+                const active = pathname === item.href || (item.href !== items[0]?.href && pathname?.startsWith(item.href + '/'));
                 return (
                   <Link key={item.href} href={item.href}
                     className={cn('whitespace-nowrap rounded-xl px-3 py-2 text-sm font-medium transition',
