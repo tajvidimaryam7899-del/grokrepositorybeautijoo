@@ -11,6 +11,7 @@ import { ServicesModule } from './services/services.module';
 import { ServiceFiltersModule } from './service-filters/service-filters.module';
 import { LocationsModule } from './locations/locations.module';
 import { AvailabilityModule } from './availability/availability.module';
+import { ScheduleModule } from './schedule/schedule.module';
 import { BookingsModule } from './bookings/bookings.module';
 import { PaymentsModule } from './payments/payments.module';
 import { SmsModule } from './sms/sms.module';
@@ -37,6 +38,7 @@ import { RolesGuard } from './common/guards/roles.guard';
     ServiceFiltersModule,
     LocationsModule,
     AvailabilityModule,
+    ScheduleModule,
     BookingsModule,
     PaymentsModule,
     ReviewsModule,
