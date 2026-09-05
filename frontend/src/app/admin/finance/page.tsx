@@ -11,11 +11,14 @@ import {
   fetchAdminFinancialTransactionDetail,
   fetchAdminCommissionSetting,
   updateAdminCommissionSetting,
+  fetchAdminFailedTransactionsAlert,
+  updateAdminFailedTransactionsThreshold,
   type AdminFinancialSummary,
   type AdminFinancialTransaction,
   type AdminFinancialTransactionDetail,
   type AdminCommissionSetting,
   type AdminFinancialPeriod,
+  type HourlyFailedAlert,
 } from '@/lib/panel-api';
 import { persianPaymentStatus } from '@/lib/persian-status';
 import { friendlyApiError } from '@/lib/api-errors';
@@ -55,6 +58,16 @@ export default function AdminFinancePage() {
   const [settingSaving, setSettingSaving] = useState(false);
   const [settingMsg, setSettingMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+  // Hourly Failed Alert
+  const [alertData, setAlertData] = useState<HourlyFailedAlert | null>(null);
+  const [alertDismissed, setAlertDismissed] = useState(false);
+  const [showThresholdModal, setShowThresholdModal] = useState(false);
+  const [thresholdInput, setThresholdInput] = useState('3');
+  const [thresholdSaving, setThresholdSaving] = useState(false);
+  const [thresholdFeedback, setThresholdFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [showRecentFailedDrawer, setShowRecentFailedDrawer] = useState(false);
+  const [simulationActive, setSimulationActive] = useState(false);
+
   // Load summary
   const loadSummary = useCallback(async (p: AdminFinancialPeriod) => {
     setSummaryLoading(true);
@@ -62,12 +75,59 @@ export default function AdminFinancePage() {
     try {
       const data = await fetchAdminFinancialSummary(p);
       setSummary(data);
+      if (data.hourlyFailedAlert) {
+        setAlertData(data.hourlyFailedAlert);
+        setThresholdInput(String(data.hourlyFailedAlert.threshold));
+      }
     } catch (e) {
       setSummaryError(friendlyApiError(e));
     } finally {
       setSummaryLoading(false);
     }
   }, []);
+
+  // Refresh alert data
+  const refreshAlertData = useCallback(async () => {
+    try {
+      const alert = await fetchAdminFailedTransactionsAlert();
+      setAlertData(alert);
+      setThresholdInput(String(alert.threshold));
+    } catch (e) {
+      console.warn('Could not refresh alert data:', e);
+    }
+  }, []);
+
+  const handleFilterFailedTransactions = () => {
+    setStatusFilter('failed');
+    setPage(1);
+    const txSection = document.getElementById('transactions-section');
+    if (txSection) {
+      txSection.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
+  const handleSaveThreshold = async () => {
+    const val = parseInt(thresholdInput, 10);
+    if (isNaN(val) || val < 1) {
+      setThresholdFeedback({ type: 'error', text: 'لطفاً عددی معتبر و بزرگتر از صفر برای آستانه وارد نمایید.' });
+      return;
+    }
+    setThresholdSaving(true);
+    setThresholdFeedback(null);
+    try {
+      await updateAdminFailedTransactionsThreshold(val);
+      await refreshAlertData();
+      setThresholdFeedback({ type: 'success', text: `حد آستانه با موفقیت به ${val} تراکنش در ساعت تغییر یافت.` });
+      setTimeout(() => {
+        setShowThresholdModal(false);
+        setThresholdFeedback(null);
+      }, 1400);
+    } catch (e) {
+      setThresholdFeedback({ type: 'error', text: friendlyApiError(e) });
+    } finally {
+      setThresholdSaving(false);
+    }
+  };
 
   // Load transactions
   const loadTransactions = useCallback(async () => {
@@ -182,8 +242,178 @@ export default function AdminFinancePage() {
     }
   };
 
+  const isAlertTriggered = Boolean(
+    alertData?.isTriggered ||
+    (alertData && alertData.failedCount >= alertData.threshold) ||
+    simulationActive
+  );
+  const displayFailedCount = simulationActive
+    ? Math.max(alertData?.failedCount ?? 0, (alertData?.threshold ?? 3) + 2)
+    : alertData?.failedCount ?? 0;
+  const displayThreshold = alertData?.threshold ?? 3;
+
   return (
     <div id="admin-finance-container" className="space-y-8 pb-12">
+      {/* Failed Transactions Hourly Alert Banner */}
+      {isAlertTriggered && !alertDismissed && (
+        <div
+          id="failed-transactions-alert-banner"
+          role="alert"
+          className="relative overflow-hidden rounded-2xl border-2 border-rose-400 bg-gradient-to-r from-rose-50 via-amber-50/60 to-orange-50 p-5 shadow-sm transition-all"
+        >
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-start gap-3.5">
+              {/* Pulsing Beacon & Icon */}
+              <div className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-rose-600 text-white shadow-md shadow-rose-200">
+                <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-rose-400 opacity-75"></span>
+                  <span className="relative inline-flex h-3.5 w-3.5 rounded-full border-2 border-white bg-rose-600"></span>
+                </span>
+                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-base font-bold text-rose-950">
+                    هشدار امنیتی درگاه: افزایش غیرعادی تراکنش‌های ناموفق در یک ساعت اخیر
+                  </h2>
+                  <span className="inline-flex items-center rounded-full bg-rose-200/80 px-2.5 py-0.5 text-xs font-bold text-rose-900">
+                    {displayFailedCount} تراکنش ناموفق (حد مجاز: {displayThreshold})
+                  </span>
+                  {simulationActive && (
+                    <span className="inline-flex items-center rounded-full bg-amber-200 px-2 py-0.5 text-[11px] font-medium text-amber-900">
+                      حالت شبیه‌سازی تست
+                    </span>
+                  )}
+                </div>
+                <p className="mt-1 text-xs leading-relaxed text-rose-900/90">
+                  در ۶۰ دقیقه گذشته، تعداد <strong className="font-bold text-rose-950">{displayFailedCount}</strong> تراکنش با وضعیت ناموفق به ثبت رسیده که فراتر از سقف آستانه بحرانی (<strong className="font-bold text-rose-950">{displayThreshold}</strong> خطا) است. پیشنهاد می‌شود وضعیت ارتباط شبکه شاپرک و درگاه بانکی را سریعاً بازبینی نمایید.
+                </p>
+              </div>
+            </div>
+
+            {/* Action buttons */}
+            <div className="flex flex-wrap items-center gap-2 lg:shrink-0">
+              <button
+                id="btn-view-failed-tx"
+                onClick={handleFilterFailedTransactions}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-rose-600 px-3.5 py-2 text-xs font-semibold text-white shadow hover:bg-rose-700 transition-colors"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                </svg>
+                مشاهده و پالایش تراکنش‌های ناموفق
+              </button>
+
+              {alertData?.recentFailed && alertData.recentFailed.length > 0 && (
+                <button
+                  id="btn-toggle-peek-failed"
+                  onClick={() => setShowRecentFailedDrawer(!showRecentFailedDrawer)}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-rose-300 bg-white px-3 py-2 text-xs font-medium text-rose-900 shadow-sm hover:bg-rose-50 transition-colors"
+                >
+                  <svg className="h-4 w-4 text-rose-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                  </svg>
+                  {showRecentFailedDrawer ? 'بستن ریز خطاها' : `بررسی سریع خطاها (${alertData.recentFailed.length})`}
+                </button>
+              )}
+
+              <button
+                id="btn-open-threshold-modal"
+                onClick={() => setShowThresholdModal(true)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-700 shadow-sm hover:bg-gray-50 transition-colors"
+              >
+                <svg className="h-4 w-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                تنظیم آستانه ({displayThreshold})
+              </button>
+
+              <button
+                id="btn-dismiss-alert"
+                onClick={() => setAlertDismissed(true)}
+                className="rounded-lg p-2 text-rose-600 hover:bg-rose-100 transition-colors"
+                title="بستن موقت اعلان"
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          {/* Quick Peek Drawer for Recent Failed Transactions */}
+          {showRecentFailedDrawer && alertData?.recentFailed && alertData.recentFailed.length > 0 && (
+            <div className="mt-4 rounded-xl border border-rose-200 bg-white/95 p-4 shadow-inner">
+              <div className="mb-2 flex items-center justify-between text-xs font-bold text-rose-950">
+                <span>آخرین تراکنش‌های ناموفق ثبت‌شده در ۶۰ دقیقه اخیر:</span>
+                <span className="text-gray-500 font-normal">کلیک روی هر سطر جهت مشاهده جزئیات پرداخت</span>
+              </div>
+              <div className="divide-y divide-rose-100 overflow-x-auto text-xs">
+                {alertData.recentFailed.map((item) => (
+                  <div key={item.id} className="flex items-center justify-between py-2 text-right">
+                    <div className="flex items-center gap-3">
+                      <span className="font-mono text-gray-500">{item.id.slice(0, 8)}...</span>
+                      <span className="font-semibold text-rose-700">{formatPrice(item.amount)}</span>
+                      <span className="text-gray-600">مشتری: {item.customerName}</span>
+                      {item.professionalTitle && (
+                        <span className="text-gray-500 hidden sm:inline">زیباگر: {item.professionalTitle}</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-gray-400 text-[11px]" dir="ltr">
+                        {new Date(item.failedAt).toLocaleTimeString('fa-IR')}
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-6 px-2 text-[11px]"
+                        onClick={() => handleOpenDetail(item.id)}
+                      >
+                        جزئیات
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Dismissed Alert Restorer Bar */}
+      {isAlertTriggered && alertDismissed && (
+        <div className="flex items-center justify-between rounded-xl border border-rose-300 bg-rose-50/80 px-4 py-2.5 text-xs text-rose-900 shadow-sm">
+          <div className="flex items-center gap-2">
+            <span className="relative flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-rose-400 opacity-75"></span>
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-rose-600"></span>
+            </span>
+            <span>
+              هشدار فعال درگاه: <strong>{displayFailedCount}</strong> تراکنش ناموفق در یک ساعت گذشته (آستانه: {displayThreshold})
+            </span>
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleFilterFailedTransactions}
+              className="font-semibold text-rose-700 underline hover:text-rose-950"
+            >
+              فیلتر تراکنش‌های ناموفق
+            </button>
+            <button
+              onClick={() => setAlertDismissed(false)}
+              className="rounded bg-rose-200 px-2 py-1 font-medium text-rose-900 hover:bg-rose-300"
+            >
+              نمایش مجدد بنر
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Header & Notice */}
       <div className="flex flex-col justify-between gap-4 border-b border-gray-100 pb-5 md:flex-row md:items-center">
         <div>
@@ -192,7 +422,26 @@ export default function AdminFinancePage() {
             محاسبه دقیق جریان نقدینگی، کارمزد پلتفرم، سهم زیباگران و گزارش شفاف تراکنش‌ها
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {isAlertTriggered ? (
+            <span className="inline-flex items-center gap-1.5 rounded-md bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-800 ring-1 ring-inset ring-rose-600/30">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-600"></span>
+              </span>
+              هشدار فعال درگاه: {displayFailedCount} خطا در ۱ ساعت اخیر
+            </span>
+          ) : (
+            <button
+              onClick={() => setShowThresholdModal(true)}
+              className="inline-flex items-center gap-1.5 rounded-md bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-800 ring-1 ring-inset ring-emerald-600/20 hover:bg-emerald-100 transition-colors"
+              title="تنظیم آستانه هشدار درگاه"
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-600"></span>
+              سلامت درگاه: عادی ({displayFailedCount} خطا در ۱ ساعت اخیر / آستانه: {displayThreshold})
+            </button>
+          )}
+
           <span className="inline-flex items-center gap-1.5 rounded-md bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-800 ring-1 ring-inset ring-amber-600/20">
             <span className="h-1.5 w-1.5 rounded-full bg-amber-600"></span>
             درگاه پرداخت: تستی (Mock Provider)
@@ -326,11 +575,34 @@ export default function AdminFinancePage() {
       </Card>
 
       {/* Transactions Table & Filters */}
-      <div className="space-y-4">
+      <div id="transactions-section" className="space-y-4 pt-2">
         <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
           <div>
-            <h2 className="text-base font-semibold text-dark">فهرست تراکنش‌های پرداخت</h2>
+            <div className="flex flex-wrap items-center gap-2.5">
+              <h2 className="text-base font-semibold text-dark">فهرست تراکنش‌های پرداخت</h2>
+              {alertData && (
+                <span
+                  className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                    isAlertTriggered
+                      ? 'bg-rose-100 text-rose-800 font-semibold'
+                      : 'bg-gray-100 text-gray-700'
+                  }`}
+                >
+                  خطاهای ۱ ساعت اخیر: {displayFailedCount} (آستانه: {displayThreshold})
+                </span>
+              )}
+            </div>
             <p className="text-xs text-gray">مجموع {totalCount.toLocaleString('fa-IR')} تراکنش ثبت شده</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowThresholdModal(true)}
+              className="text-xs h-8 border-gray-200 hover:bg-gray-50"
+            >
+              تنظیم آستانه هشدار خطاها
+            </Button>
           </div>
         </div>
 
@@ -659,6 +931,102 @@ export default function AdminFinancePage() {
                 </div>
               </div>
             ) : null}
+          </div>
+        </div>
+      )}
+
+      {/* Threshold Configuration Modal */}
+      {showThresholdModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <h3 className="text-base font-bold text-dark">تنظیم آستانه هشدار تراکنش‌های ناموفق</h3>
+              <button
+                onClick={() => setShowThresholdModal(false)}
+                className="text-gray-400 hover:text-dark text-lg leading-none"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-4 text-xs">
+              <p className="text-gray leading-relaxed">
+                در صورتی که تعداد تراکنش‌های ناموفق ثبت‌شده در ۶۰ دقیقه اخیر به این عدد یا بیشتر برسد، یک اعلان و بنر بصری هشدار امنیتی در بالای صفحه مدیریت مالی برای مدیران ارشد به نمایش درخواهد آمد.
+              </p>
+
+              <div>
+                <label className="block font-semibold text-dark mb-1">
+                  حداکثر تراکنش ناموفق مجاز در هر ساعت (سقف آستانه):
+                </label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    min={1}
+                    max={1000}
+                    value={thresholdInput}
+                    onChange={(e) => setThresholdInput(e.target.value)}
+                    className="w-28 text-center font-bold"
+                  />
+                  <span className="text-gray">تراکنش در ۶۰ دقیقه</span>
+                </div>
+                <div className="mt-1 text-[11px] text-gray-500">
+                  مقدار پیش‌فرض سیستم: ۳ خطا در ساعت. جهت نظارت حساس‌تر در ساعات شلوغی می‌توانید این رقم را به ۱ یا ۲ کاهش دهید.
+                </div>
+              </div>
+
+              {/* Simulation preview toggle */}
+              <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50/70 p-3.5">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="font-semibold text-dark">شبیه‌سازی و تست نمایش اعلان</div>
+                    <div className="text-[11px] text-gray mt-0.5 leading-relaxed">
+                      پیش‌نمایش فوری وضعیت اعلان در بالای صفحه جهت بررسی بصری حتی زمانی که خطای زنده وجود ندارد.
+                    </div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    id="toggle-simulation"
+                    checked={simulationActive}
+                    onChange={(e) => {
+                      setSimulationActive(e.target.checked);
+                      if (e.target.checked) setAlertDismissed(false);
+                    }}
+                    className="h-4 w-4 rounded border-gray-300 text-coral focus:ring-coral cursor-pointer shrink-0"
+                  />
+                </div>
+              </div>
+
+              {thresholdFeedback && (
+                <div
+                  className={`rounded-lg p-2.5 text-xs font-medium ${
+                    thresholdFeedback.type === 'success'
+                      ? 'bg-emerald-50 text-emerald-800'
+                      : 'bg-rose-50 text-rose-800'
+                  }`}
+                >
+                  {thresholdFeedback.text}
+                </div>
+              )}
+            </div>
+
+            <div className="mt-6 flex justify-end gap-2 border-t border-gray-100 pt-3">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowThresholdModal(false)}
+                disabled={thresholdSaving}
+              >
+                انصراف
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleSaveThreshold}
+                disabled={thresholdSaving}
+                className="bg-coral text-white hover:bg-coral/90"
+              >
+                {thresholdSaving ? 'در حال ذخیره...' : 'ذخیره آستانه'}
+              </Button>
+            </div>
           </div>
         </div>
       )}

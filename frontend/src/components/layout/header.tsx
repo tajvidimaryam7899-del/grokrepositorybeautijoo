@@ -57,12 +57,13 @@ export function Header() {
 
           {!loading && isAuthenticated ? (
             <div className="hidden items-center gap-2 sm:flex">
-              {hasRole('SUPER_ADMIN') && (
+              {(hasRole('SUPER_ADMIN') || hasRole('admin')) && (
                 <Link
                   href="/admin"
-                  className="rounded-xl px-2 py-1.5 text-sm font-medium text-blue hover:bg-blue-soft"
+                  className="flex items-center gap-1.5 rounded-xl bg-blue-soft border border-blue/40 px-3 py-1.5 text-xs sm:text-sm font-bold text-blue hover:bg-blue hover:text-white transition-all shadow-sm"
                 >
-                  ادمین
+                  <span>👑</span>
+                  <span>پنل سوپر ادمین</span>
                 </Link>
               )}
               {hasRole('professional') && (
@@ -73,7 +74,7 @@ export function Header() {
                   پنل زیباگر
                 </Link>
               )}
-              {hasRole('customer') && (
+              {hasRole('customer') && !hasRole('SUPER_ADMIN') && (
                 <Link
                   href="/panel"
                   className="rounded-2xl bg-gray-light px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-gray-mid"
@@ -81,7 +82,7 @@ export function Header() {
                   پنل مشتری
                 </Link>
               )}
-              {!hasRole('customer') && hasRole('professional') && (
+              {!hasRole('customer') && hasRole('professional') && !hasRole('SUPER_ADMIN') && (
                 <Link
                   href="/zibagar"
                   className="rounded-2xl bg-gray-light px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-gray-mid"
@@ -89,11 +90,11 @@ export function Header() {
                   {displayName}
                 </Link>
               )}
-              {hasRole('customer') && !hasRole('professional') && (
+              {hasRole('customer') && !hasRole('professional') && !hasRole('SUPER_ADMIN') && (
                 <span className="hidden text-sm text-gray sm:inline">{displayName}</span>
               )}
-              {hasRole('SUPER_ADMIN') && !hasRole('customer') && !hasRole('professional') && (
-                <span className="hidden text-sm text-gray sm:inline">{displayName}</span>
+              {(hasRole('SUPER_ADMIN') || hasRole('admin')) && (
+                <span className="hidden text-xs font-medium text-gray sm:inline">مدیر کل سیستم</span>
               )}
               <Button variant="ghost" size="sm" onClick={() => logout()}>
                 خروج
@@ -103,14 +104,22 @@ export function Header() {
             !loading && (
               <div className="hidden items-center gap-2 sm:flex">
                 <Link
+                  href="/login?next=/admin"
+                  className="inline-flex items-center gap-1 rounded-xl border border-blue/30 bg-blue-soft/50 px-3 py-1.5 text-xs font-bold text-blue transition-all hover:bg-blue hover:text-white"
+                  title="ورود مستقیم به عنوان مدیر کل سیستم"
+                >
+                  <span>👑</span>
+                  <span>ورود سوپر ادمین</span>
+                </Link>
+                <Link
                   href="/login"
-                  className="inline-flex h-10 items-center rounded-2xl px-4 text-sm font-medium text-foreground transition-colors hover:bg-gray-light"
+                  className="inline-flex h-9 items-center rounded-xl px-3 text-sm font-medium text-foreground transition-colors hover:bg-gray-light"
                 >
                   ورود
                 </Link>
                 <Link
                   href="/register"
-                  className="inline-flex h-10 items-center rounded-2xl bg-coral px-4 text-sm font-medium text-white shadow-sm transition-colors hover:bg-coral-dark"
+                  className="inline-flex h-9 items-center rounded-xl bg-coral px-3.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-coral-dark"
                 >
                   ثبت‌نام
                 </Link>
@@ -175,13 +184,14 @@ export function Header() {
                     پنل زیباگر
                   </Link>
                 )}
-                {hasRole('SUPER_ADMIN') && (
+                {(hasRole('SUPER_ADMIN') || hasRole('admin')) && (
                   <Link
                     href="/admin"
                     onClick={() => setOpen(false)}
-                    className="rounded-xl px-3 py-3 text-blue hover:bg-blue-soft"
+                    className="flex items-center gap-2 rounded-xl bg-blue-soft border border-blue/40 px-3 py-3 font-bold text-blue hover:bg-blue hover:text-white"
                   >
-                    ادمین
+                    <span>👑</span>
+                    <span>پنل سوپر ادمین</span>
                   </Link>
                 )}
                 <button
@@ -197,6 +207,14 @@ export function Header() {
               </>
             ) : (
               <>
+                <Link
+                  href="/login?next=/admin"
+                  onClick={() => setOpen(false)}
+                  className="flex items-center gap-2 rounded-xl bg-blue-soft border border-blue/40 px-3 py-3 font-bold text-blue hover:bg-blue hover:text-white"
+                >
+                  <span>👑</span>
+                  <span>ورود به پنل سوپر ادمین</span>
+                </Link>
                 <Link
                   href="/login"
                   onClick={() => setOpen(false)}

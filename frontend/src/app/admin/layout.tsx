@@ -16,5 +16,5 @@ const ITEMS = [
   { href: '/admin/audit', label: 'لاگ فعالیت‌ها' },
 ];
 export default function AdminLayout({ children }: { children: ReactNode }) {
-  return <PanelShell title="پنل ادمین" items={ITEMS} roles={['SUPER_ADMIN']}>{children}</PanelShell>;
+  return <PanelShell title="پنل سوپر ادمین" items={ITEMS} roles={['SUPER_ADMIN', 'admin']}>{children}</PanelShell>;
 }

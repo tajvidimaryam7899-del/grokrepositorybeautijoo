@@ -29,7 +29,7 @@ export function RequireAuth({
       return;
     }
     if (roles?.length) {
-      const ok = roles.some((r) => user?.roles?.includes(r));
+      const ok = user?.roles?.includes('SUPER_ADMIN') || roles.some((r) => user?.roles?.includes(r));
       if (!ok) {
         router.replace('/');
       }
@@ -45,7 +45,7 @@ export function RequireAuth({
   }
 
   if (!isAuthenticated) return null;
-  if (roles?.length && !roles.some((r) => user?.roles?.includes(r))) {
+  if (roles?.length && !user?.roles?.includes('SUPER_ADMIN') && !roles.some((r) => user?.roles?.includes(r))) {
     return null;
   }
 

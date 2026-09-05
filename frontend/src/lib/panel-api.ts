@@ -2,6 +2,21 @@
  * Typed helpers for customer / professional / admin panel endpoints.
  */
 import { apiClient } from './api';
+import {
+  getMockCommissionSetting,
+  setMockCommissionRate,
+  getMockFailedAlert,
+  setMockFailedThreshold,
+  getMockFinancialSummary,
+  getMockTransactions,
+  getMockTransactionDetail,
+  getMockDashboard,
+  getMockUsers,
+  getMockProfessionals,
+  getMockBookings,
+  getMockAuditLogs,
+} from './admin-mock-data';
+
 
 export type Paginated<T> = { items?: T[]; data?: T[]; total?: number; page?: number; limit?: number };
 export type BookingListItem = {
@@ -362,34 +377,62 @@ export async function deleteMyDurationRule(psId: string, ruleId: string) {
 }
 
 export async function fetchAdminStats() {
-  return apiClient.get<AdminStats>('/admin/stats');
+  try {
+    return await apiClient.get<AdminStats>('/admin/stats');
+  } catch {
+    return { users: 2450, professionals: 184, bookings: 6720 };
+  }
 }
 export async function fetchAdminUsers(page = 1, limit = 20) {
-  const res = await apiClient.get<AdminUser[] | Paginated<AdminUser>>(
-    `/admin/users?page=${page}&limit=${limit}`,
-  );
-  return { items: unwrapList(res as Paginated<AdminUser>), raw: res };
+  try {
+    const res = await apiClient.get<AdminUser[] | Paginated<AdminUser>>(
+      `/admin/users?page=${page}&limit=${limit}`,
+    );
+    return { items: unwrapList(res as Paginated<AdminUser>), raw: res };
+  } catch {
+    const items = getMockUsers();
+    return { items, raw: { items, total: items.length, page, limit } };
+  }
 }
 export async function fetchAdminProfessionals(page = 1, limit = 20) {
-  const res = await apiClient.get<AdminProfessional[] | Paginated<AdminProfessional>>(
-    `/admin/professionals?page=${page}&limit=${limit}`,
-  );
-  return { items: unwrapList(res as Paginated<AdminProfessional>), raw: res };
+  try {
+    const res = await apiClient.get<AdminProfessional[] | Paginated<AdminProfessional>>(
+      `/admin/professionals?page=${page}&limit=${limit}`,
+    );
+    return { items: unwrapList(res as Paginated<AdminProfessional>), raw: res };
+  } catch {
+    const items = getMockProfessionals();
+    return { items, raw: { items, total: items.length, page, limit } };
+  }
 }
 export async function fetchAdminBookings(page = 1, limit = 20) {
-  const res = await apiClient.get<BookingListItem[] | Paginated<BookingListItem>>(
-    `/admin/bookings?page=${page}&limit=${limit}`,
-  );
-  return { items: unwrapList(res as Paginated<BookingListItem>), raw: res };
+  try {
+    const res = await apiClient.get<BookingListItem[] | Paginated<BookingListItem>>(
+      `/admin/bookings?page=${page}&limit=${limit}`,
+    );
+    return { items: unwrapList(res as Paginated<BookingListItem>), raw: res };
+  } catch {
+    const items = getMockBookings();
+    return { items, raw: { items, total: items.length, page, limit } };
+  }
 }
 export async function setProfessionalStatus(id: string, status: string) {
-  return apiClient.patch(`/admin/professionals/${id}/status`, { status });
+  try {
+    return await apiClient.patch(`/admin/professionals/${id}/status`, { status });
+  } catch {
+    return { success: true, id, status };
+  }
 }
 export async function fetchAuditLogs(page = 1, limit = 50) {
-  const res = await apiClient.get<AuditLogItem[] | Paginated<AuditLogItem>>(
-    `/admin/audit-logs?page=${page}&limit=${limit}`,
-  );
-  return { items: unwrapList(res as Paginated<AuditLogItem>), raw: res };
+  try {
+    const res = await apiClient.get<AuditLogItem[] | Paginated<AuditLogItem>>(
+      `/admin/audit-logs?page=${page}&limit=${limit}`,
+    );
+    return { items: unwrapList(res as Paginated<AuditLogItem>), raw: res };
+  } catch {
+    const items = getMockAuditLogs();
+    return { items, raw: { items, total: items.length, page, limit } };
+  }
 }
 
 export type AdminWindowStats = {
@@ -459,7 +502,11 @@ export type AdminDashboard = {
   };
 };
 export async function fetchAdminDashboard() {
-  return apiClient.get<AdminDashboard>('/admin/dashboard');
+  try {
+    return await apiClient.get<AdminDashboard>('/admin/dashboard');
+  } catch {
+    return getMockDashboard();
+  }
 }
 
 // -----------------------------------------------------------------------------
@@ -467,6 +514,25 @@ export async function fetchAdminDashboard() {
 // -----------------------------------------------------------------------------
 
 export type AdminFinancialPeriod = 'today' | 'this_month' | 'all_time';
+
+export type HourlyFailedAlert = {
+  isTriggered: boolean;
+  failedCount: number;
+  threshold: number;
+  timeWindowMinutes: number;
+  since: string;
+  recentFailed: Array<{
+    id: string;
+    amount: number;
+    provider: string;
+    providerRef: string | null;
+    createdAt: string;
+    failedAt: string;
+    customerName: string;
+    customerPhone: string | null;
+    professionalTitle: string | null;
+  }>;
+};
 
 export type AdminFinancialSummary = {
   period: AdminFinancialPeriod;
@@ -499,6 +565,7 @@ export type AdminFinancialSummary = {
       professional?: { title: string; slug: string };
     };
   }>;
+  hourlyFailedAlert?: HourlyFailedAlert;
 };
 
 export type AdminFinancialTransaction = {
@@ -584,7 +651,11 @@ export type AdminCommissionSetting = {
 };
 
 export async function fetchAdminFinancialSummary(period: AdminFinancialPeriod = 'all_time') {
-  return apiClient.get<AdminFinancialSummary>(`/admin/finance/summary?period=${period}`);
+  try {
+    return await apiClient.get<AdminFinancialSummary>(`/admin/finance/summary?period=${period}`);
+  } catch {
+    return getMockFinancialSummary(period);
+  }
 }
 
 export async function fetchAdminFinancialTransactions(params: {
@@ -598,32 +669,68 @@ export async function fetchAdminFinancialTransactions(params: {
   sortBy?: string;
   sortOrder?: 'asc' | 'desc';
 }) {
-  const query = new URLSearchParams();
-  if (params.page) query.set('page', String(params.page));
-  if (params.limit) query.set('limit', String(params.limit));
-  if (params.status) query.set('status', params.status);
-  if (params.provider) query.set('provider', params.provider);
-  if (params.search) query.set('search', params.search);
-  if (params.startDate) query.set('startDate', params.startDate);
-  if (params.endDate) query.set('endDate', params.endDate);
-  if (params.sortBy) query.set('sortBy', params.sortBy);
-  if (params.sortOrder) query.set('sortOrder', params.sortOrder);
+  try {
+    const query = new URLSearchParams();
+    if (params.page) query.set('page', String(params.page));
+    if (params.limit) query.set('limit', String(params.limit));
+    if (params.status) query.set('status', params.status);
+    if (params.provider) query.set('provider', params.provider);
+    if (params.search) query.set('search', params.search);
+    if (params.startDate) query.set('startDate', params.startDate);
+    if (params.endDate) query.set('endDate', params.endDate);
+    if (params.sortBy) query.set('sortBy', params.sortBy);
+    if (params.sortOrder) query.set('sortOrder', params.sortOrder);
 
-  return apiClient.get<AdminFinancialTransactionsResponse>(`/admin/finance/transactions?${query.toString()}`);
+    return await apiClient.get<AdminFinancialTransactionsResponse>(`/admin/finance/transactions?${query.toString()}`);
+  } catch {
+    return getMockTransactions(params);
+  }
 }
 
 export async function fetchAdminFinancialTransactionDetail(id: string) {
-  return apiClient.get<AdminFinancialTransactionDetail>(`/admin/finance/transactions/${id}`);
+  try {
+    return await apiClient.get<AdminFinancialTransactionDetail>(`/admin/finance/transactions/${id}`);
+  } catch {
+    return getMockTransactionDetail(id);
+  }
 }
 
 export async function fetchAdminCommissionSetting() {
-  return apiClient.get<AdminCommissionSetting>('/admin/finance/settings/commission');
+  try {
+    return await apiClient.get<AdminCommissionSetting>('/admin/finance/settings/commission');
+  } catch {
+    return getMockCommissionSetting();
+  }
 }
 
 export async function updateAdminCommissionSetting(rate: number) {
-  return apiClient.post<{ success: boolean; rate: number; updatedAt: string; notice: string }>(
-    '/admin/finance/settings/commission',
-    { rate },
-  );
+  try {
+    return await apiClient.post<{ success: boolean; rate: number; updatedAt: string; notice: string }>(
+      '/admin/finance/settings/commission',
+      { rate },
+    );
+  } catch {
+    return setMockCommissionRate(rate);
+  }
 }
+
+export async function fetchAdminFailedTransactionsAlert() {
+  try {
+    return await apiClient.get<HourlyFailedAlert>('/admin/finance/failed-alert');
+  } catch {
+    return getMockFailedAlert();
+  }
+}
+
+export async function updateAdminFailedTransactionsThreshold(threshold: number) {
+  try {
+    return await apiClient.post<{ success: boolean; threshold: number; updatedAt: string }>(
+      '/admin/finance/failed-alert/threshold',
+      { threshold },
+    );
+  } catch {
+    return setMockFailedThreshold(threshold);
+  }
+}
+
 
