@@ -4,7 +4,8 @@
   "private": true,
   "description": "Beautijoo - Persian RTL marketplace and booking platform for beauty professionals",
   "workspaces": [
-    "frontend"
+    "frontend",
+    "backend"
   ],
   "scripts": {
     "dev": "cd frontend && npm run dev",
