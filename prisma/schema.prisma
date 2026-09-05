@@ -470,9 +470,12 @@ model Payment {
   idempotencyKey  String        @unique @map("idempotency_key") @db.VarChar(100)
   paidAt          DateTime?     @map("paid_at") @db.Timestamptz
   failedAt        DateTime?     @map("failed_at") @db.Timestamptz
-  metadata        Json?
-  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt       DateTime      @updatedAt @map("updated_at") @db.Timestamptz
+  metadata                 Json?
+  platformCommissionRate   Decimal?      @map("platform_commission_rate") @db.Decimal(5, 2)
+  platformCommissionAmount Int?          @map("platform_commission_amount")
+  professionalNetAmount    Int?          @map("professional_net_amount")
+  createdAt                DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt                DateTime      @updatedAt @map("updated_at") @db.Timestamptz
   booking Booking @relation(fields: [bookingId], references: [id], onDelete: Restrict)
   @@index([status])
   @@index([providerRef])

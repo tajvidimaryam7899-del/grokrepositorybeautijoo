@@ -1,6 +1,11 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ProfessionalStatus, BookingStatus, PaymentStatus, Prisma } from '@prisma/client';
+import {
+  DEFAULT_PLATFORM_COMMISSION_RATE,
+  PLATFORM_COMMISSION_RATE_KEY,
+  calculateCommission,
+} from '../payments/financial.util';
 
 // NOTE: PaymentsModule currently binds PAYMENT_PROVIDER to MockPaymentProvider
 // (see backend/src/payments/payments.module.ts) — there is no real payment
@@ -333,5 +338,347 @@ export class AdminService {
       this.prisma.auditLog.count(),
     ]);
     return { items, meta: { page, limit, total } };
+  }
+
+  /**
+   * Financial Summary / Dashboard KPI
+   * Aggregates real payments by period: 'today' | 'this_month' | 'all_time'
+   */
+  async getFinancialSummary(period: 'today' | 'this_month' | 'all_time' = 'all_time') {
+    const now = new Date();
+    let startDate: Date | undefined;
+
+    if (period === 'today') {
+      startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    } else if (period === 'this_month') {
+      startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+    }
+
+    const dateFilter = startDate ? { gte: startDate } : undefined;
+
+    const [
+      paidAggregate,
+      paidCount,
+      pendingCount,
+      failedCount,
+      cancelledCount,
+      refundedCount,
+      recentPaidPayments,
+    ] = await Promise.all([
+      this.prisma.payment.aggregate({
+        where: {
+          status: PaymentStatus.paid,
+          ...(dateFilter ? { paidAt: dateFilter } : {}),
+        },
+        _sum: {
+          amount: true,
+          platformCommissionAmount: true,
+          professionalNetAmount: true,
+        },
+      }),
+      this.prisma.payment.count({
+        where: {
+          status: PaymentStatus.paid,
+          ...(dateFilter ? { paidAt: dateFilter } : {}),
+        },
+      }),
+      this.prisma.payment.count({
+        where: {
+          status: PaymentStatus.pending,
+          ...(dateFilter ? { createdAt: dateFilter } : {}),
+        },
+      }),
+      this.prisma.payment.count({
+        where: {
+          status: PaymentStatus.failed,
+          ...(dateFilter ? { failedAt: dateFilter } : {}),
+        },
+      }),
+      this.prisma.payment.count({
+        where: {
+          status: PaymentStatus.cancelled,
+          ...(dateFilter ? { createdAt: dateFilter } : {}),
+        },
+      }),
+      this.prisma.payment.count({
+        where: {
+          status: PaymentStatus.refunded,
+          ...(dateFilter ? { createdAt: dateFilter } : {}),
+        },
+      }),
+      this.prisma.payment.findMany({
+        where: {
+          status: PaymentStatus.paid,
+          ...(dateFilter ? { paidAt: dateFilter } : {}),
+        },
+        orderBy: { paidAt: 'desc' },
+        take: 10,
+        select: {
+          id: true,
+          amount: true,
+          platformCommissionRate: true,
+          platformCommissionAmount: true,
+          professionalNetAmount: true,
+          provider: true,
+          providerRef: true,
+          paidAt: true,
+          booking: {
+            select: {
+              id: true,
+              customer: { select: { phone: true, profile: { select: { displayName: true } } } },
+              professional: { select: { title: true, slug: true } },
+            },
+          },
+        },
+      }),
+    ]);
+
+    return {
+      period,
+      currency: 'TOMAN',
+      providerType: 'MOCK_TEST_PAYMENT',
+      refundImplemented: false,
+      grossRevenue: paidAggregate._sum.amount ?? 0,
+      platformCommission: paidAggregate._sum.platformCommissionAmount ?? 0,
+      professionalNet: paidAggregate._sum.professionalNetAmount ?? 0,
+      paymentFee: 0,
+      transactions: {
+        paid: paidCount,
+        pending: pendingCount,
+        failed: failedCount,
+        cancelled: cancelledCount,
+        refunded: refundedCount,
+      },
+      recentPaidPayments,
+    };
+  }
+
+  /**
+   * Financial Transactions List with filters, search, pagination
+   */
+  async listFinancialTransactions(query: {
+    page?: number;
+    limit?: number;
+    status?: PaymentStatus;
+    provider?: string;
+    search?: string;
+    startDate?: string;
+    endDate?: string;
+    sortBy?: 'createdAt' | 'paidAt' | 'amount';
+    sortOrder?: 'asc' | 'desc';
+  }) {
+    const page = Math.max(1, Number(query.page) || 1);
+    const limit = Math.min(100, Math.max(1, Number(query.limit) || 20));
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.PaymentWhereInput = {};
+
+    if (query.status) {
+      where.status = query.status;
+    }
+
+    if (query.provider) {
+      where.provider = { equals: query.provider, mode: 'insensitive' };
+    }
+
+    if (query.startDate || query.endDate) {
+      const dateRange: Prisma.DateTimeFilter = {};
+      if (query.startDate) dateRange.gte = new Date(query.startDate);
+      if (query.endDate) {
+        const end = new Date(query.endDate);
+        end.setHours(23, 59, 59, 999);
+        dateRange.lte = end;
+      }
+      where.createdAt = dateRange;
+    }
+
+    if (query.search && query.search.trim()) {
+      const term = query.search.trim();
+      where.OR = [
+        { providerRef: { contains: term, mode: 'insensitive' } },
+        { idempotencyKey: { contains: term, mode: 'insensitive' } },
+        { booking: { customer: { phone: { contains: term } } } },
+        { booking: { customer: { profile: { displayName: { contains: term, mode: 'insensitive' } } } } },
+        { booking: { professional: { title: { contains: term, mode: 'insensitive' } } } },
+      ];
+    }
+
+    const sortField = query.sortBy || 'createdAt';
+    const sortDir = query.sortOrder === 'asc' ? 'asc' : 'desc';
+
+    const [items, total] = await Promise.all([
+      this.prisma.payment.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { [sortField]: sortDir },
+        include: {
+          booking: {
+            select: {
+              id: true,
+              totalPrice: true,
+              status: true,
+              scheduledDate: true,
+              customer: {
+                select: {
+                  id: true,
+                  phone: true,
+                  profile: { select: { displayName: true } },
+                },
+              },
+              professional: {
+                select: {
+                  id: true,
+                  title: true,
+                  slug: true,
+                },
+              },
+            },
+          },
+        },
+      }),
+      this.prisma.payment.count({ where }),
+    ]);
+
+    return {
+      items,
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  /**
+   * Financial Transaction / Payment Detail
+   */
+  async getFinancialTransactionDetail(id: string) {
+    const payment = await this.prisma.payment.findUnique({
+      where: { id },
+      include: {
+        booking: {
+          include: {
+            customer: {
+              select: {
+                id: true,
+                phone: true,
+                profile: { select: { displayName: true } },
+              },
+            },
+            professional: {
+              select: {
+                id: true,
+                title: true,
+                slug: true,
+                address: true,
+                user: { select: { phone: true } },
+              },
+            },
+            items: {
+              include: {
+                service: { select: { name: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!payment) {
+      throw new NotFoundException('تراکنش مالی یافت نشد');
+    }
+
+    return {
+      ...payment,
+      isCommissionSnapshotted: payment.platformCommissionRate !== null,
+      providerNote: 'Mock / Test Payment Provider',
+      refundStatus: 'Not Implemented',
+    };
+  }
+
+  /**
+   * Get current Commission Setting
+   */
+  async getCommissionSetting() {
+    let rate = DEFAULT_PLATFORM_COMMISSION_RATE;
+    let updatedAt: Date | null = null;
+
+    try {
+      const setting = await this.prisma.platformSetting.findUnique({
+        where: { key: PLATFORM_COMMISSION_RATE_KEY },
+      });
+      if (setting && setting.value !== null && setting.value !== undefined) {
+        const val = typeof setting.value === 'number'
+          ? setting.value
+          : (typeof setting.value === 'object' && 'rate' in (setting.value as any))
+            ? Number((setting.value as any).rate)
+            : Number(setting.value);
+        if (!isNaN(val) && val >= 0 && val <= 100) {
+          rate = val;
+          updatedAt = setting.updatedAt;
+        }
+      }
+    } catch {
+      rate = DEFAULT_PLATFORM_COMMISSION_RATE;
+    }
+
+    return {
+      key: PLATFORM_COMMISSION_RATE_KEY,
+      rate,
+      defaultRate: DEFAULT_PLATFORM_COMMISSION_RATE,
+      updatedAt,
+      notice: 'تغییر نرخ کارمزد فقط بر تراکنش‌های آینده اعمال شده و Snapshot تراکنش‌های گذشته بدون تغییر باقی می‌ماند.',
+    };
+  }
+
+  /**
+   * Update Commission Setting with Audit Log
+   */
+  async updateCommissionSetting(newRate: number, adminUserId?: string) {
+    if (typeof newRate !== 'number' || isNaN(newRate) || newRate < 0 || newRate > 100) {
+      throw new BadRequestException('نرخ کارمزد باید عددی بین ۰ تا ۱۰۰ باشد.');
+    }
+
+    // Keep max 2 decimal places deterministically
+    const roundedRate = Math.round(newRate * 100) / 100;
+
+    const oldSetting = await this.getCommissionSetting();
+
+    const updated = await this.prisma.platformSetting.upsert({
+      where: { key: PLATFORM_COMMISSION_RATE_KEY },
+      update: {
+        value: { rate: roundedRate },
+      },
+      create: {
+        key: PLATFORM_COMMISSION_RATE_KEY,
+        value: { rate: roundedRate },
+      },
+    });
+
+    // Write sensitive action to existing AuditLog model
+    await this.prisma.auditLog.create({
+      data: {
+        actorId: adminUserId || null,
+        actorRole: 'SUPER_ADMIN',
+        action: 'UPDATE_COMMISSION_RATE',
+        entityType: 'platform_setting',
+        entityId: updated.id,
+        payload: {
+          key: PLATFORM_COMMISSION_RATE_KEY,
+          previousRate: oldSetting.rate,
+          newRate: roundedRate,
+        },
+      },
+    });
+
+    return {
+      success: true,
+      key: PLATFORM_COMMISSION_RATE_KEY,
+      rate: roundedRate,
+      updatedAt: updated.updatedAt,
+      notice: 'تغییر نرخ کارمزد با موفقیت ذخیره و در لاگ سیستم ثبت شد.',
+    };
   }
 }
