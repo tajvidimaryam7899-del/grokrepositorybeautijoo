@@ -27,11 +27,16 @@ ENV PORT=3000
 
 # Keep the standalone directory structure exactly as Next.js generated it.
 COPY --from=builder /app/frontend/.next/standalone ./standalone
-COPY --from=builder /app/frontend/.next/static ./standalone/.next/static
-COPY --from=builder /app/frontend/public ./standalone/public
+
+# Keep static assets separately, then place them beside the actual standalone
+# server at runtime. This handles the workspace layout created by
+# outputFileTracingRoot without changing application code.
+COPY --from=builder /app/frontend/.next/static ./next-static
+COPY --from=builder /app/frontend/public ./next-public
 
 EXPOSE 3000
 
 # Next.js standalone can place server.js below the standalone root when the
-# application lives inside a workspace. Locate it instead of assuming /app/server.js.
-CMD ["sh", "-c", "SERVER=$(find /app/standalone -type f -name server.js -print -quit); test -n \"$SERVER\"; cd \"$(dirname \"$SERVER\")\"; exec node \"$(basename \"$SERVER\")\""]
+# application lives inside a workspace. Locate it, put public/.next/static
+# beside that server, then start it from its own directory.
+CMD ["sh", "-c", "SERVER=$(find /app/standalone -type f -name server.js -print -quit); test -n \"$SERVER\"; SERVER_DIR=$(dirname \"$SERVER\"); mkdir -p \"$SERVER_DIR/.next\"; cp -a /app/next-static \"$SERVER_DIR/.next/static\"; cp -a /app/next-public \"$SERVER_DIR/public\"; cd \"$SERVER_DIR\"; exec node \"$(basename \"$SERVER\")\""]
