@@ -14,6 +14,9 @@ COPY frontend ./frontend
 
 RUN npm run build
 
+# Fail the image build early if Next.js did not produce a standalone server.
+RUN test -n "$(find /app/frontend/.next/standalone -type f -name server.js -print -quit)"
+
 FROM node:22-bookworm-slim AS runner
 
 WORKDIR /app
@@ -22,10 +25,13 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 ENV PORT=3000
 
-COPY --from=builder /app/frontend/public ./public
-COPY --from=builder /app/frontend/.next/standalone ./
-COPY --from=builder /app/frontend/.next/static ./.next/static
+# Keep the standalone directory structure exactly as Next.js generated it.
+COPY --from=builder /app/frontend/.next/standalone ./standalone
+COPY --from=builder /app/frontend/.next/static ./standalone/.next/static
+COPY --from=builder /app/frontend/public ./standalone/public
 
 EXPOSE 3000
 
-CMD ["node", "server.js"]
+# Next.js standalone can place server.js below the standalone root when the
+# application lives inside a workspace. Locate it instead of assuming /app/server.js.
+CMD ["sh", "-c", "SERVER=$(find /app/standalone -type f -name server.js -print -quit); test -n \"$SERVER\"; cd \"$(dirname \"$SERVER\")\"; exec node \"$(basename \"$SERVER\")\""]
