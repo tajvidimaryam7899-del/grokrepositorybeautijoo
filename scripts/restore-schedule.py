@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 import base64
 from pathlib import Path
-h = "".join(Path(f".tmp-restore/h{i}.b64").read_text().strip() for i in range(8))
-p = "".join(Path(f".tmp-restore/p{i}.b64").read_text().strip() for i in range(7))
+h = "".join(Path(f".tmp-restore2/h{i}.b64").read_text().strip() for i in range(13))
+p = "".join(Path(f".tmp-restore2/p{i}.b64").read_text().strip() for i in range(16))
 Path("frontend/src/app/zibagar/hours/page.tsx").write_bytes(base64.b64decode(h))
 Path("frontend/src/lib/panel-api.ts").write_bytes(base64.b64decode(p))
 print("hours", Path("frontend/src/app/zibagar/hours/page.tsx").stat().st_size)
