@@ -21,7 +21,9 @@ export class LocationsService {
   ) {}
 
   private normalizeCoords(data: LocationInput) {
-    const precision = data.precision || (data.latitude != null && data.longitude != null ? 'exact' : 'approximate');
+    const precision =
+      data.precision ||
+      (data.latitude != null && data.longitude != null ? 'exact' : 'approximate');
     let latitude = data.latitude != null ? Number(data.latitude) : null;
     let longitude = data.longitude != null ? Number(data.longitude) : null;
     if (precision === 'approximate') {
@@ -43,36 +45,46 @@ export class LocationsService {
   }
 
   async addOrUpdatePrimary(userId: string, data: LocationInput) {
+    if (!data.city?.trim()) throw new BadRequestException('شهر الزامی است');
     const pro = await this.professionals.requireOwnProfessional(userId);
     const { precision, latitude, longitude } = this.normalizeCoords(data);
+    const name = data.name?.trim() || data.city.trim();
     const address = this.buildAddress(data, precision);
+
     const primary = await this.prisma.professionalLocation.findFirst({
       where: { professionalId: pro.id, isPrimary: true },
       include: { location: true },
     });
+
     if (primary) {
       await this.prisma.location.update({
         where: { id: primary.locationId },
         data: {
-          name: data.name || primary.location.name,
+          name: data.name?.trim() || primary.location.name,
           address,
-          city: data.city,
-          province: data.province,
+          city: data.city.trim(),
+          province: data.province || null,
           latitude,
           longitude,
         },
       });
       return this.prisma.professionalLocation.findUnique({
-        where: { id: primary.id },
+        where: {
+          professionalId_locationId: {
+            professionalId: pro.id,
+            locationId: primary.locationId,
+          },
+        },
         include: { location: true },
       });
     }
+
     const location = await this.prisma.location.create({
       data: {
-        name: data.name || data.city,
+        name,
         address,
-        city: data.city,
-        province: data.province,
+        city: data.city.trim(),
+        province: data.province || null,
         latitude,
         longitude,
       },
@@ -87,10 +99,10 @@ export class LocationsService {
     });
   }
 
-  async updateLocation(userId: string, id: string, data: LocationInput) {
+  async updateLocation(userId: string, locationId: string, data: LocationInput) {
     const pro = await this.professionals.requireOwnProfessional(userId);
     const row = await this.prisma.professionalLocation.findFirst({
-      where: { id, professionalId: pro.id },
+      where: { locationId, professionalId: pro.id },
       include: { location: true },
     });
     if (!row) throw new NotFoundException('مکان یافت نشد');
@@ -99,10 +111,10 @@ export class LocationsService {
     await this.prisma.location.update({
       where: { id: row.locationId },
       data: {
-        name: data.name ?? row.location.name,
+        name: data.name?.trim() ?? row.location.name,
         address,
-        city: data.city,
-        province: data.province,
+        city: data.city.trim(),
+        province: data.province ?? row.location.province,
         latitude,
         longitude,
       },
@@ -113,12 +125,22 @@ export class LocationsService {
         data: { isPrimary: false },
       });
       await this.prisma.professionalLocation.update({
-        where: { id },
+        where: {
+          professionalId_locationId: {
+            professionalId: pro.id,
+            locationId: row.locationId,
+          },
+        },
         data: { isPrimary: true },
       });
     }
     return this.prisma.professionalLocation.findUnique({
-      where: { id },
+      where: {
+        professionalId_locationId: {
+          professionalId: pro.id,
+          locationId: row.locationId,
+        },
+      },
       include: { location: true },
     });
   }
