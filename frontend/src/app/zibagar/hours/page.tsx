@@ -127,11 +127,11 @@ export default function ZibagarHoursPage() {
         return t < be && se > bs;
       });
       if (booked) { out.push({ start, end, status: 'booked', name: booked.customer?.profile?.displayName || 'مشتری' }); continue; }
-      const blk = dayOffs.find((t) => {
+      const blk = dayOffs.find((item) => {
         const [y, m, d] = selectedIso.split('-').map(Number);
         const ds = Date.UTC(y, m - 1, d) - off;
-        const bs = Math.max(0, Math.round((new Date(t.startAt).getTime() - ds) / 60000));
-        const be = Math.min(1440, Math.round((new Date(t.endAt).getTime() - ds) / 60000));
+        const bs = Math.max(0, Math.round((new Date(item.startAt).getTime() - ds) / 60000));
+        const be = Math.min(1440, Math.round((new Date(item.endAt).getTime() - ds) / 60000));
         return t < be && se > bs;
       });
       if (blk) { out.push({ start, end, status: 'blocked', id: blk.id }); continue; }
