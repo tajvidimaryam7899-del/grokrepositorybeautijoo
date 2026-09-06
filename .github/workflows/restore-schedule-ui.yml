@@ -1,0 +1,12 @@
+name: Restore schedule UI files
+on:
+  workflow_dispatch:
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Placeholder
+        run: echo "will update"
