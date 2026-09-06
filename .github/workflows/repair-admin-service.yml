@@ -1,0 +1,71 @@
+name: Repair AdminService
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: ${{ github.actor != 'github-actions[bot]' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout current main
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Restore exact AdminService base and apply the three relation fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin 7d724e901cfc8dd8e392897b4a84d68332b7fc1f --depth=1
+          git checkout 7d724e901cfc8dd8e392897b4a84d68332b7fc1f -- backend/src/admin/admin.service.ts
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('backend/src/admin/admin.service.ts')
+          s = p.read_text(encoding='utf-8')
+          replacements = [
+              ("_count: { select: { bookings: true, reviews: true, services: true } }", "_count: { select: { bookings: true, reviews: true, professionalServices: true } }"),
+              ("services: { include: { service: true } }", "professionalServices: { include: { service: true } }"),
+              ("reviews: true,", "review: true,"),
+          ]
+          counts = []
+          for old, new in replacements:
+              n = s.count(old)
+              counts.append(n)
+              if n != 1:
+                  raise SystemExit(f'Expected exactly one occurrence of {old!r}, found {n}')
+              s = s.replace(old, new, 1)
+          p.write_text(s, encoding='utf-8')
+          print('replacement counts:', counts)
+          print('lines:', len(s.splitlines()))
+          if len(s.splitlines()) != 1502:
+              raise SystemExit('Unexpected AdminService line count')
+          if 'PLACEHOLDER_WILL_REPLACE' in s or 'PLACEHOLDER' in s:
+              raise SystemExit('Placeholder detected')
+          PY
+
+      - name: Verify only AdminService changed
+        run: |
+          set -euo pipefail
+          test -z "$(git status --porcelain --untracked-files=all | grep -v '^ M backend/src/admin/admin.service.ts$' || true)"
+          git diff -- backend/src/admin/admin.service.ts
+
+      - name: Build
+        working-directory: backend
+        run: npm run build
+
+      - name: Commit repaired file and remove this temporary workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add backend/src/admin/admin.service.ts
+          git rm .github/workflows/repair-admin-service.yml
+          git commit -m 'fix(admin): restore full AdminService from 7d724e9 and align Prisma relations'
+          git push origin HEAD:main
