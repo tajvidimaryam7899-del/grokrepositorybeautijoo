@@ -1,1 +1,231 @@
-PLACEHOLDER_WILL_FAIL
+import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
+import { ProfessionalsService } from '../professionals/professionals.service';
+
+type LocationInput = {
+  name?: string;
+  address?: string;
+  city: string;
+  province?: string;
+  latitude?: number;
+  longitude?: number;
+  isPrimary?: boolean;
+  precision?: 'exact' | 'approximate';
+};
+
+@Injectable()
+export class LocationsService {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly professionals: ProfessionalsService,
+  ) {}
+
+  private normalizeCoords(data: LocationInput) {
+    const precision = data.precision || (data.latitude != null && data.longitude != null ? 'exact' : 'approximate');
+    let latitude = data.latitude != null ? Number(data.latitude) : null;
+    let longitude = data.longitude != null ? Number(data.longitude) : null;
+    if (precision === 'approximate') {
+      if (latitude != null) latitude = Math.round(latitude * 100) / 100;
+      if (longitude != null) longitude = Math.round(longitude * 100) / 100;
+    }
+    return { precision, latitude, longitude };
+  }
+
+  private buildAddress(data: LocationInput, precision: string) {
+    const base = (data.address?.trim() || '').trim();
+    if (precision === 'approximate' && !base) {
+      return `محدوده ${data.city}${data.province ? `، ${data.province}` : ''}`;
+    }
+    if (precision === 'approximate' && base && !base.includes('محدوده')) {
+      return `${base} (محدوده تقریبی)`;
+    }
+    return base || `${data.province || ''} ${data.city}`.trim();
+  }
+
+  async addOrUpdatePrimary(userId: string, data: LocationInput) {
+    const pro = await this.professionals.requireOwnProfessional(userId);
+    const { precision, latitude, longitude } = this.normalizeCoords(data);
+    const address = this.buildAddress(data, precision);
+    const primary = await this.prisma.professionalLocation.findFirst({
+      where: { professionalId: pro.id, isPrimary: true },
+      include: { location: true },
+    });
+    if (primary) {
+      await this.prisma.location.update({
+        where: { id: primary.locationId },
+        data: {
+          name: data.name || primary.location.name,
+          address,
+          city: data.city,
+          province: data.province,
+          latitude,
+          longitude,
+        },
+      });
+      return this.prisma.professionalLocation.findUnique({
+        where: { id: primary.id },
+        include: { location: true },
+      });
+    }
+    const location = await this.prisma.location.create({
+      data: {
+        name: data.name || data.city,
+        address,
+        city: data.city,
+        province: data.province,
+        latitude,
+        longitude,
+      },
+    });
+    return this.prisma.professionalLocation.create({
+      data: {
+        professionalId: pro.id,
+        locationId: location.id,
+        isPrimary: true,
+      },
+      include: { location: true },
+    });
+  }
+
+  async updateLocation(userId: string, id: string, data: LocationInput) {
+    const pro = await this.professionals.requireOwnProfessional(userId);
+    const row = await this.prisma.professionalLocation.findFirst({
+      where: { id, professionalId: pro.id },
+      include: { location: true },
+    });
+    if (!row) throw new NotFoundException('مکان یافت نشد');
+    const { precision, latitude, longitude } = this.normalizeCoords(data);
+    const address = this.buildAddress(data, precision);
+    await this.prisma.location.update({
+      where: { id: row.locationId },
+      data: {
+        name: data.name ?? row.location.name,
+        address,
+        city: data.city,
+        province: data.province,
+        latitude,
+        longitude,
+      },
+    });
+    if (data.isPrimary) {
+      await this.prisma.professionalLocation.updateMany({
+        where: { professionalId: pro.id },
+        data: { isPrimary: false },
+      });
+      await this.prisma.professionalLocation.update({
+        where: { id },
+        data: { isPrimary: true },
+      });
+    }
+    return this.prisma.professionalLocation.findUnique({
+      where: { id },
+      include: { location: true },
+    });
+  }
+
+  async listMine(userId: string) {
+    const pro = await this.professionals.requireOwnProfessional(userId);
+    return this.prisma.professionalLocation.findMany({
+      where: { professionalId: pro.id },
+      include: { location: true },
+    });
+  }
+
+  async setWorkingHours(
+    userId: string,
+    data: {
+      dayOfWeek: string;
+      startTime: string;
+      endTime: string;
+      breaks?: { startTime: string; endTime: string }[];
+      isActive?: boolean;
+    },
+  ) {
+    const pro = await this.professionals.requireOwnProfessional(userId);
+    const isActive = data.isActive !== false;
+    const existing = await this.prisma.workingHour.findFirst({
+      where: {
+        professionalId: pro.id,
+        dayOfWeek: data.dayOfWeek as never,
+        startTime: data.startTime,
+      },
+    });
+    if (existing) {
+      await this.prisma.workingHourBreak.deleteMany({ where: { workingHourId: existing.id } });
+      return this.prisma.workingHour.update({
+        where: { id: existing.id },
+        data: {
+          endTime: data.endTime,
+          isActive,
+          breaks: {
+            create: (data.breaks || []).map((b) => ({
+              startTime: b.startTime,
+              endTime: b.endTime,
+            })),
+          },
+        },
+        include: { breaks: true },
+      });
+    }
+    return this.prisma.workingHour.create({
+      data: {
+        professionalId: pro.id,
+        dayOfWeek: data.dayOfWeek as never,
+        startTime: data.startTime,
+        endTime: data.endTime,
+        isActive,
+        breaks: {
+          create: (data.breaks || []).map((b) => ({
+            startTime: b.startTime,
+            endTime: b.endTime,
+          })),
+        },
+      },
+      include: { breaks: true },
+    });
+  }
+
+  async listWorkingHours(userId: string) {
+    const pro = await this.professionals.requireOwnProfessional(userId);
+    return this.prisma.workingHour.findMany({
+      where: { professionalId: pro.id },
+      include: { breaks: true },
+      orderBy: { dayOfWeek: 'asc' },
+    });
+  }
+
+  async listTimeOff(userId: string) {
+    const pro = await this.professionals.requireOwnProfessional(userId);
+    return this.prisma.timeOff.findMany({
+      where: { professionalId: pro.id },
+      orderBy: { startAt: 'asc' },
+    });
+  }
+
+  async addTimeOff(userId: string, data: { startAt: string; endAt: string; reason?: string }) {
+    const pro = await this.professionals.requireOwnProfessional(userId);
+    const startAt = new Date(data.startAt);
+    const endAt = new Date(data.endAt);
+    if (!(startAt.getTime() < endAt.getTime())) {
+      throw new BadRequestException('بازه زمانی نامعتبر است');
+    }
+    return this.prisma.timeOff.create({
+      data: {
+        professionalId: pro.id,
+        startAt,
+        endAt,
+        reason: data.reason,
+      },
+    });
+  }
+
+  async removeTimeOff(userId: string, id: string) {
+    const pro = await this.professionals.requireOwnProfessional(userId);
+    const row = await this.prisma.timeOff.findFirst({
+      where: { id, professionalId: pro.id },
+    });
+    if (!row) throw new NotFoundException('بازه مسدود یافت نشد');
+    await this.prisma.timeOff.delete({ where: { id } });
+    return { ok: true };
+  }
+}
