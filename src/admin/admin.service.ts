@@ -872,7 +872,7 @@ export class AdminService {
         orderBy: { createdAt: 'desc' },
         include: {
           user: { include: { profile: true } },
-          _count: { select: { bookings: true, reviews: true, services: true } },
+          _count: { select: { bookings: true, reviews: true, professionalServices: true } },
         },
       }),
       this.prisma.professional.count({ where }),
@@ -889,7 +889,7 @@ export class AdminService {
       include: {
         user: { include: { profile: true } },
         locations: true,
-        services: { include: { service: true } },
+        professionalreviews: true,
         workingHours: true,
         mediaAssets: true,
         _count: { select: { bookings: true, reviews: true } },
