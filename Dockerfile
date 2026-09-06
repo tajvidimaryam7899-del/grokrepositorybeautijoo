@@ -5,6 +5,14 @@ WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 
+# NEXT_PUBLIC_* are baked into the client bundle at build time.
+ARG NEXT_PUBLIC_API_URL=https://api.beautijoo.ir/api/v1
+ARG NEXT_PUBLIC_APP_URL=https://beautijoo.ir
+ARG NEXT_PUBLIC_APP_NAME=Beautijoo
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
+ENV NEXT_PUBLIC_APP_NAME=$NEXT_PUBLIC_APP_NAME
+
 COPY package.json ./
 COPY frontend/package.json ./frontend/package.json
 COPY backend/package.json ./backend/package.json
