@@ -22,9 +22,8 @@ class WorkingHourDto {
   @IsString() dayOfWeek!: string;
   @IsString() startTime!: string;
   @IsString() endTime!: string;
-  @IsOptional() breaks?: { startTime: string; endTime: string }[];
-  /** When false, the day/range is deactivated without deleting history. */
   @IsOptional() @IsBoolean() isActive?: boolean;
+  @IsOptional() breaks?: { startTime: string; endTime: string }[];
 }
 
 class TimeOffDto {

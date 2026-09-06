@@ -1,18 +1,36 @@
-/**
- * Minimal Jalali (Persian) calendar helpers — no external dependency.
- * Algorithm based on well-known civil conversion (compatible with Iran calendar).
- */
+/** Minimal Jalali (Persian) calendar helpers — no external deps */
 
-const PERSIAN_MONTHS = [
-  'فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور',
-  'مهر', 'آبان', 'آذر', 'دی', 'بهمن', 'اسفند',
+export type DayOfWeekValue =
+  | 'saturday'
+  | 'sunday'
+  | 'monday'
+  | 'tuesday'
+  | 'wednesday'
+  | 'thursday'
+  | 'friday';
+
+export const PERSIAN_WEEKDAYS = ['ش', 'ی', 'د', 'س', 'چ', 'پ', 'ج'] as const;
+
+const MONTH_NAMES = [
+  'فروردین',
+  'اردیبهشت',
+  'خرداد',
+  'تیر',
+  'مرداد',
+  'شهریور',
+  'مهر',
+  'آبان',
+  'آذر',
+  'دی',
+  'بهمن',
+  'اسفند',
 ];
 
-const PERSIAN_WEEKDAYS = [
-  'شنبه', 'یکشنبه', 'دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پنج‌شنبه', 'جمعه',
-];
+export function pad2(n: number): string {
+  return n < 10 ? `0${n}` : String(n);
+}
 
-/** Gregorian → Jalali */
+/** Gregorian → Jalali (algorithm from jalaali-js simplified) */
 export function toJalali(gy: number, gm: number, gd: number): { jy: number; jm: number; jd: number } {
   const g_d_m = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
   let jy = gy <= 1600 ? 0 : 979;
@@ -64,14 +82,10 @@ export function toGregorian(jy: number, jm: number, jd: number): { gy: number; g
     d = (d - 1) % 365;
   }
   const gd = d + 1;
-  const sal_a = [
-    0, 31,
-    (gy % 4 === 0 && gy % 100 !== 0) || gy % 400 === 0 ? 29 : 28,
-    31, 30, 31, 30, 31, 31, 30, 31, 30, 31,
-  ];
+  const sal_a = [0, 31, (gy % 4 === 0 && gy % 100 !== 0) || gy % 400 === 0 ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
   let gm = 0;
   let v = gd;
-  for (let i = 1; i <= 12; i++) {
+  for (let i = 0; i < 13; i++) {
     const v2 = v - sal_a[i];
     if (v2 <= 0) {
       gm = i;
@@ -83,109 +97,128 @@ export function toGregorian(jy: number, jm: number, jd: number): { gy: number; g
 }
 
 export function jalaliMonthName(jm: number): string {
-  return PERSIAN_MONTHS[jm - 1] || '';
-}
-
-export function pad2(n: number): string {
-  return String(n).padStart(2, '0');
-}
-
-/** YYYY-MM-DD (Gregorian) */
-export function toIsoDate(gy: number, gm: number, gd: number): string {
-  return `${gy}-${pad2(gm)}-${pad2(gd)}`;
-}
-
-export function fromIsoDate(iso: string): { gy: number; gm: number; gd: number } {
-  const [gy, gm, gd] = iso.split('-').map(Number);
-  return { gy, gm, gd };
-}
-
-export function isoToJalaliLabel(iso: string): string {
-  const { gy, gm, gd } = fromIsoDate(iso);
-  const { jy, jm, jd } = toJalali(gy, gm, gd);
-  return `${jy}/${pad2(jm)}/${pad2(jd)}`;
-}
-
-/** 0 = Saturday … 6 = Friday (Persian week) */
-export function persianWeekdayIndex(gy: number, gm: number, gd: number): number {
-  const utc = Date.UTC(gy, gm - 1, gd);
-  const jsDay = new Date(utc).getUTCDay();
-  return (jsDay + 1) % 7;
-}
-
-export function persianWeekdayName(gy: number, gm: number, gd: number): string {
-  return PERSIAN_WEEKDAYS[persianWeekdayIndex(gy, gm, gd)];
-}
-
-export const DAY_OF_WEEK_VALUES = [
-  'saturday', 'sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday',
-] as const;
-
-export type DayOfWeekValue = (typeof DAY_OF_WEEK_VALUES)[number];
-
-export function dayOfWeekFromIso(iso: string): DayOfWeekValue {
-  const { gy, gm, gd } = fromIsoDate(iso);
-  return DAY_OF_WEEK_VALUES[persianWeekdayIndex(gy, gm, gd)];
-}
-
-export function todayIsoTehran(): string {
-  const now = new Date();
-  const tehran = new Date(now.getTime() + 3.5 * 60 * 60 * 1000);
-  const y = tehran.getUTCFullYear();
-  const m = tehran.getUTCMonth() + 1;
-  const d = tehran.getUTCDate();
-  return toIsoDate(y, m, d);
-}
-
-export function daysInJalaliMonth(jy: number, jm: number): number {
-  if (jm <= 6) return 31;
-  if (jm <= 11) return 30;
-  const r = jy % 33;
-  const leaps = [1, 5, 9, 13, 17, 22, 26, 30];
-  return leaps.includes(r) ? 30 : 29;
-}
-
-export function buildJalaliMonthGrid(jy: number, jm: number): Array<{
-  jy: number; jm: number; jd: number; iso: string; inMonth: boolean;
-}> {
-  const { gy, gm, gd } = toGregorian(jy, jm, 1);
-  const startWeekIdx = persianWeekdayIndex(gy, gm, gd);
-  const dim = daysInJalaliMonth(jy, jm);
-  const cells: Array<{ jy: number; jm: number; jd: number; iso: string; inMonth: boolean }> = [];
-  const prevJm = jm === 1 ? 12 : jm - 1;
-  const prevJy = jm === 1 ? jy - 1 : jy;
-  const prevDim = daysInJalaliMonth(prevJy, prevJm);
-  for (let i = startWeekIdx - 1; i >= 0; i--) {
-    const jd = prevDim - i;
-    const g = toGregorian(prevJy, prevJm, jd);
-    cells.push({ jy: prevJy, jm: prevJm, jd, iso: toIsoDate(g.gy, g.gm, g.gd), inMonth: false });
-  }
-  for (let jd = 1; jd <= dim; jd++) {
-    const g = toGregorian(jy, jm, jd);
-    cells.push({ jy, jm, jd, iso: toIsoDate(g.gy, g.gm, g.gd), inMonth: true });
-  }
-  while (cells.length % 7 !== 0) {
-    const last = cells[cells.length - 1];
-    let njy = last.jy;
-    let njm = last.jm;
-    let njd = last.jd + 1;
-    if (njd > daysInJalaliMonth(njy, njm)) {
-      njd = 1;
-      njm += 1;
-      if (njm > 12) { njm = 1; njy += 1; }
-    }
-    const g = toGregorian(njy, njm, njd);
-    cells.push({ jy: njy, jm: njm, jd: njd, iso: toIsoDate(g.gy, g.gm, g.gd), inMonth: false });
-  }
-  return cells;
+  return MONTH_NAMES[(jm - 1 + 12) % 12] || String(jm);
 }
 
 export function addJalaliMonths(jy: number, jm: number, delta: number): { jy: number; jm: number } {
   let m = jm + delta;
   let y = jy;
-  while (m > 12) { m -= 12; y += 1; }
-  while (m < 1) { m += 12; y -= 1; }
+  while (m > 12) {
+    m -= 12;
+    y += 1;
+  }
+  while (m < 1) {
+    m += 12;
+    y -= 1;
+  }
   return { jy: y, jm: m };
 }
 
-export { PERSIAN_MONTHS, PERSIAN_WEEKDAYS };
+/** ISO date YYYY-MM-DD in Tehran calendar day → DayOfWeekValue (Sat=0 in Persian week) */
+export function dayOfWeekFromIso(iso: string): DayOfWeekValue {
+  const [y, m, d] = iso.split('-').map(Number);
+  // Use UTC noon to avoid DST edge; map JS getUTCDay (0=Sun) to Persian order
+  const dt = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
+  const js = dt.getUTCDay(); // 0 Sun .. 6 Sat
+  const map: DayOfWeekValue[] = [
+    'sunday',
+    'monday',
+    'tuesday',
+    'wednesday',
+    'thursday',
+    'friday',
+    'saturday',
+  ];
+  return map[js];
+}
+
+export function isoToJalaliLabel(iso: string): string {
+  const [y, m, d] = iso.split('-').map(Number);
+  const { jy, jm, jd } = toJalali(y, m, d);
+  return `${jd} ${jalaliMonthName(jm)} ${jy}`;
+}
+
+/** Today as YYYY-MM-DD in Asia/Tehran */
+export function todayIsoTehran(): string {
+  const offsetMs = 3.5 * 60 * 60 * 1000;
+  const tehran = new Date(Date.now() + offsetMs);
+  return `${tehran.getUTCFullYear()}-${pad2(tehran.getUTCMonth() + 1)}-${pad2(tehran.getUTCDate())}`;
+}
+
+export type MonthCell = {
+  iso: string;
+  jy: number;
+  jm: number;
+  jd: number;
+  inMonth: boolean;
+};
+
+/** Build 6x7 grid starting Saturday for a Jalali month */
+export function buildJalaliMonthGrid(jy: number, jm: number): MonthCell[] {
+  const { gy, gm, gd } = toGregorian(jy, jm, 1);
+  const firstIso = `${gy}-${pad2(gm)}-${pad2(gd)}`;
+  const firstDow = dayOfWeekFromIso(firstIso);
+  const order: DayOfWeekValue[] = [
+    'saturday',
+    'sunday',
+    'monday',
+    'tuesday',
+    'wednesday',
+    'thursday',
+    'friday',
+  ];
+  const startOffset = order.indexOf(firstDow);
+
+  // days in Jalali month
+  const daysInMonth =
+    jm <= 6 ? 31 : jm <= 11 ? 30 : /* Esfand */ isJalaliLeap(jy) ? 30 : 29;
+
+  const cells: MonthCell[] = [];
+  // previous month fillers
+  const prev = addJalaliMonths(jy, jm, -1);
+  const prevDays =
+    prev.jm <= 6 ? 31 : prev.jm <= 11 ? 30 : isJalaliLeap(prev.jy) ? 30 : 29;
+  for (let i = 0; i < startOffset; i++) {
+    const jd = prevDays - startOffset + i + 1;
+    const g = toGregorian(prev.jy, prev.jm, jd);
+    cells.push({
+      iso: `${g.gy}-${pad2(g.gm)}-${pad2(g.gd)}`,
+      jy: prev.jy,
+      jm: prev.jm,
+      jd,
+      inMonth: false,
+    });
+  }
+  for (let jd = 1; jd <= daysInMonth; jd++) {
+    const g = toGregorian(jy, jm, jd);
+    cells.push({
+      iso: `${g.gy}-${pad2(g.gm)}-${pad2(g.gd)}`,
+      jy,
+      jm,
+      jd,
+      inMonth: true,
+    });
+  }
+  // next month fillers to 42
+  const next = addJalaliMonths(jy, jm, 1);
+  let n = 1;
+  while (cells.length < 42) {
+    const g = toGregorian(next.jy, next.jm, n);
+    cells.push({
+      iso: `${g.gy}-${pad2(g.gm)}-${pad2(g.gd)}`,
+      jy: next.jy,
+      jm: next.jm,
+      jd: n,
+      inMonth: false,
+    });
+    n += 1;
+  }
+  return cells;
+}
+
+function isJalaliLeap(jy: number): boolean {
+  // approximate: cycle of 33 years
+  const breaks = [1, 5, 9, 13, 17, 22, 26, 30];
+  const cy = jy % 33;
+  return breaks.includes(cy);
+}
