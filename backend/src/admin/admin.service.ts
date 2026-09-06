@@ -1032,7 +1032,7 @@ export class AdminService {
         location: true,
         items: { include: { service: true } },
         payment: true,
-        reviews: true,
+        review: true,
       },
     });
     if (!booking) throw new NotFoundException('رزرو یافت نشد');
