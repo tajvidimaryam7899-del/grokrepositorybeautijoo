@@ -889,7 +889,7 @@ export class AdminService {
       include: {
         user: { include: { profile: true } },
         locations: true,
-        professionalreviews: true,
+        professionalServices: { include: { service: true } },
         workingHours: true,
         mediaAssets: true,
         _count: { select: { bookings: true, reviews: true } },
