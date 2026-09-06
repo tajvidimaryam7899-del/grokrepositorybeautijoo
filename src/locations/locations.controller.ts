@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { IsBoolean, IsIn, IsNumber, IsOptional, IsString, MinLength } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -23,6 +23,8 @@ class WorkingHourDto {
   @IsString() startTime!: string;
   @IsString() endTime!: string;
   @IsOptional() breaks?: { startTime: string; endTime: string }[];
+  /** When false, the day/range is deactivated without deleting history. */
+  @IsOptional() @IsBoolean() isActive?: boolean;
 }
 
 class TimeOffDto {
@@ -67,8 +69,18 @@ export class LocationsController {
     return this.service.setWorkingHours(userId, dto);
   }
 
+  @Get('time-off')
+  listTimeOff(@CurrentUser('id') userId: string) {
+    return this.service.listTimeOff(userId);
+  }
+
   @Post('time-off')
   timeOff(@CurrentUser('id') userId: string, @Body() dto: TimeOffDto) {
     return this.service.addTimeOff(userId, dto);
+  }
+
+  @Delete('time-off/:id')
+  removeTimeOff(@CurrentUser('id') userId: string, @Param('id') id: string) {
+    return this.service.removeTimeOff(userId, id);
   }
 }
